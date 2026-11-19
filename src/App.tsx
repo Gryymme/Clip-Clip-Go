@@ -1,6 +1,7 @@
 import { useReducer, useRef, useState } from 'react';
 import Converter from './converter/Converter';
 import { initialSelection, selectionReducer } from './converter/selection';
+import { useConversion } from './converter/useConversion';
 
 const pages = [
   { name: 'Downloader', description: 'A future home for authorized media downloads.' },
@@ -14,6 +15,7 @@ export default function App() {
   const [activePage, setActivePage] = useState<(typeof pages)[number]>(pages[0]);
   const [selection, dispatchSelection] = useReducer(selectionReducer, initialSelection);
   const selectionBusy = useRef(false);
+  const conversion = useConversion(selection, dispatchSelection);
 
   return (
     <div className="app-shell">
@@ -41,10 +43,10 @@ export default function App() {
         <header className="page-header">
           <h1>{activePage.name}</h1>
         </header>
-        {activePage.name === 'Converter' ? <Converter state={selection} dispatch={dispatchSelection} busy={selectionBusy} /> : <section className="placeholder" aria-labelledby="placeholder-title" aria-live="polite" aria-atomic="true">
+        {activePage.name === 'Converter' ? <Converter state={selection} dispatch={dispatchSelection} busy={selectionBusy} conversion={conversion} /> : <section className="placeholder" aria-labelledby="placeholder-title" aria-live="polite" aria-atomic="true">
           <h2 id="placeholder-title">Not implemented yet</h2>
           <p>{activePage.description}</p>
-          <p className="placeholder-note">This preview provides navigation only. No files or jobs are processed.</p>
+          <p className="placeholder-note">No actions are available on this page yet.</p>
         </section>}
       </main>
     </div>

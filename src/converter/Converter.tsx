@@ -4,17 +4,24 @@ import { categoryLabels, inputGroups, outputGroups, outputHelp } from './formats
 import { selectMediaFile } from './native';
 import { formatFileSize, selectionError } from './selection';
 import type { SelectionAction, SelectionState } from './selection';
+import type { ConversionController } from './useConversion';
+import { isMediaFile } from './conversion';
+import { ConversionActions, EngineSetup } from './ConversionControls';
 
-export default function Converter({ state, dispatch, busy }: {
+export default function Converter({ state, dispatch, busy, conversion }: {
   state: SelectionState;
   dispatch: Dispatch<SelectionAction>;
   busy: { current: boolean };
+  conversion: ConversionController;
 }) {
   const selectButton = useRef<HTMLButtonElement>(null);
   const { file, selecting } = state;
+  const mediaInput = isMediaFile(file);
+  const locked = state.locked || conversion.busy;
+  const inspecting = conversion.engineLoading || conversion.probing;
 
   async function selectFile() {
-    if (busy.current) return;
+    if (busy.current || locked || inspecting) return;
     busy.current = true;
     dispatch({ type: 'start' });
     try {
@@ -44,10 +51,10 @@ export default function Converter({ state, dispatch, busy }: {
         </details>
         <div className="action-row">
           <button className="button button-primary" type="button" ref={selectButton}
-            aria-describedby="input-help" aria-disabled={selecting} onClick={selectFile}>
+            aria-describedby="input-help" disabled={locked || inspecting} aria-disabled={selecting || locked || inspecting} onClick={selectFile}>
             {selecting ? 'Choosing file…' : file ? 'Replace file' : 'Choose file'}
           </button>
-          {file && <button className="button" type="button" disabled={selecting} onClick={removeFile}>Remove file</button>}
+          {file && <button className="button" type="button" disabled={selecting || locked || inspecting} onClick={removeFile}>Remove file</button>}
         </div>
         <p className="selection-notice" role="status">{selecting ? 'Choose one file in the open dialog. File details will be checked after selection.' : state.notice}</p>
         {state.error && <div className="selection-error" role="alert">
@@ -60,25 +67,26 @@ export default function Converter({ state, dispatch, busy }: {
           <div><dt>Size</dt><dd className="file-size">{formatFileSize(file.sizeBytes)}</dd></div>
           <div><dt>Category</dt><dd>{categoryLabels[file.category]} (based on extension)</dd></div>
         </dl> : <p className="field-help">No file selected.</p>}
-        <p className="field-help">File type is preliminary, based on its extension. Content inspection is not implemented yet.</p>
+        <p className="field-help">Category is based on the extension. Audio/video streams are checked with FFprobe when the engines are ready; image and document content inspection is not implemented.</p>
       </section>
+      {(!file || mediaInput) && <EngineSetup controller={conversion} selecting={selecting} />}
       <section className="converter-section" aria-labelledby="output-heading">
         <h2 id="output-heading">Choose an output format</h2>
         <label className="field-label" htmlFor="output-format">Output format</label>
-        <select id="output-format" value={state.output} disabled={!file || selecting}
-          aria-describedby="output-help" onChange={event => dispatch({ type: 'output', format: event.target.value })}>
+        <select id="output-format" value={state.output} disabled={!file || selecting || locked || (mediaInput && (!conversion.engine?.ready || inspecting))}
+          aria-describedby="output-help output-availability" onChange={event => dispatch({ type: 'output', format: event.target.value })}>
           {!file && <option value="">Select a file first</option>}
           {file && outputGroups(file.format).map(group => <optgroup key={group.label} label={group.label}>
-            {group.formats.map(format => <option key={format} value={format}>{format.toUpperCase()}</option>)}
+            {group.formats.map(format => {
+              const available = !mediaInput || conversion.formats.find(item => item.format === format)?.available;
+              return <option key={format} value={format} disabled={!available}>{format.toUpperCase()}{!available ? ' — unavailable' : ''}</option>;
+            })}
           </optgroup>)}
         </select>
         <p className="field-help" id="output-help">{file && state.output ? outputHelp(file.format, state.output) : 'Select a file to see its planned outputs.'}</p>
-        {file && <p className="field-help">These are planned conversion routes. Actual support will be validated when conversion engines are integrated.</p>}
+        <p className="field-help" id="output-availability">{mediaInput ? conversion.availability?.reason ?? 'Formats depend on the selected media streams and bundled encoders.' : file ? 'These are planned conversion routes. Actual support will be validated when conversion engines are integrated.' : ''}</p>
       </section>
-      <div className="conversion-action">
-        <button className="button" type="button" disabled aria-describedby="conversion-limitation">Convert</button>
-        <p className="field-help" id="conversion-limitation">Conversion is not available yet</p>
-      </div>
+      <ConversionActions controller={conversion} file={file} />
     </div>
   );
 }

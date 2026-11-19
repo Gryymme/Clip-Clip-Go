@@ -1,0 +1,610 @@
+use crate::{
+    engine::{self, EngineReport, Engines, MediaInfo, OutputFormat, FORMATS},
+    process::{Control, LineHandler, NativeRunner, Result, Runner, CANCELLED},
+};
+use serde::{Deserialize, Serialize};
+use std::{
+    collections::HashSet,
+    path::{Path, PathBuf},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex,
+    },
+};
+use tauri_plugin_dialog::DialogExt;
+
+#[derive(Clone, Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum JobPhase {
+    Validating,
+    ChoosingDestination,
+    Running,
+    Verifying,
+    Cancelling,
+    Succeeded,
+    Failed,
+    Cancelled,
+}
+impl JobPhase {
+    fn busy(&self) -> bool {
+        !matches!(self, Self::Succeeded | Self::Failed | Self::Cancelled)
+    }
+}
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Job {
+    pub id: u64,
+    pub revision: u64,
+    pub phase: JobPhase,
+    pub input_path: String,
+    pub destination: Option<String>,
+    pub format: OutputFormat,
+    pub duration: Option<f64>,
+    pub seconds: f64,
+    pub percent: Option<f64>,
+    pub message: String,
+}
+#[derive(Default)]
+struct Inner {
+    engines: Option<Engines>,
+    report: Option<EngineReport>,
+    active: Option<Arc<Control>>,
+    job: Option<Job>,
+    selected: HashSet<PathBuf>,
+}
+#[derive(Default)]
+pub struct Core {
+    inner: Mutex<Inner>,
+    sequence: AtomicU64,
+}
+#[derive(Default)]
+pub struct Runtime {
+    pub core: Arc<Core>,
+}
+struct Operation {
+    core: Arc<Core>,
+    control: Arc<Control>,
+}
+impl Drop for Operation {
+    fn drop(&mut self) {
+        let mut inner = self.core.inner.lock().unwrap();
+        if inner
+            .active
+            .as_ref()
+            .is_some_and(|c| Arc::ptr_eq(c, &self.control))
+        {
+            inner.active = None;
+        }
+    }
+}
+impl Core {
+    fn reserve(self: &Arc<Self>) -> Result<Operation> {
+        let mut inner = self.inner.lock().unwrap();
+        if inner.active.is_some() {
+            return Err("Another engine operation is in progress. Wait for it to finish.".into());
+        }
+        let control = Arc::new(Control::default());
+        inner.active = Some(control.clone());
+        Ok(Operation {
+            core: self.clone(),
+            control,
+        })
+    }
+    pub fn busy(&self) -> bool {
+        self.inner
+            .lock()
+            .unwrap()
+            .job
+            .as_ref()
+            .is_some_and(|j| j.phase.busy())
+    }
+    pub fn remember(&self, path: &Path) {
+        if let Ok(path) = path.canonicalize() {
+            self.inner.lock().unwrap().selected.insert(path);
+        }
+    }
+    fn authorize(&self, path: &str) -> Result<PathBuf> {
+        let path = Path::new(path).canonicalize().map_err(|_| {
+            "The input file is missing or inaccessible. Select it again.".to_string()
+        })?;
+        if !self.inner.lock().unwrap().selected.contains(&path) {
+            return Err(
+                "Select the input using the app's file dialog before converting it.".into(),
+            );
+        }
+        engine::is_video_input(&path)?;
+        Ok(path)
+    }
+    fn engines(&self) -> Result<Engines> {
+        self.inner.lock().unwrap().engines.clone().ok_or_else(|| {
+            "Bundled conversion engines are unavailable. Repair or reinstall Clip-Clip-Go.".into()
+        })
+    }
+    fn update(&self, id: u64, change: impl FnOnce(&mut Job)) {
+        if let Some(job) = self.inner.lock().unwrap().job.as_mut() {
+            if job.id == id {
+                change(job);
+                job.revision += 1;
+            }
+        }
+    }
+    fn job(&self) -> Option<Job> {
+        self.inner.lock().unwrap().job.clone()
+    }
+    pub fn shutdown(&self) {
+        if let Some(control) = self.inner.lock().unwrap().active.clone() {
+            control.cancel();
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum EngineSource {
+    Current,
+    Bundled,
+}
+#[tauri::command]
+pub async fn configure_engines(
+    state: tauri::State<'_, Runtime>,
+    source: EngineSource,
+) -> Result<EngineReport> {
+    let core = state.core.clone();
+    let operation = core.reserve()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        if matches!(source, EngineSource::Current) {
+            if let Some(report) = core.inner.lock().unwrap().report.clone() {
+                return Ok(report);
+            }
+        }
+        let inspected = crate::bundled::resolve().and_then(|(ffmpeg, ffprobe)| {
+            engine::inspect_engines(ffmpeg, ffprobe, None, &NativeRunner, &operation.control)
+        });
+        let mut inner = core.inner.lock().unwrap();
+        match inspected {
+            Ok(engines) => {
+                let report = engines.report.clone();
+                inner.engines = Some(engines);
+                inner.report = Some(report.clone());
+                Ok(report)
+            }
+            Err(message) => {
+                let report = EngineReport::missing(message);
+                inner.engines = None;
+                inner.report = Some(report.clone());
+                Ok(report)
+            }
+        }
+    })
+    .await
+    .map_err(|_| {
+        "Bundled engines could not be checked. Restart the app or repair the installation."
+            .to_string()
+    })?
+}
+
+#[tauri::command]
+pub async fn probe_media(
+    state: tauri::State<'_, Runtime>,
+    input_path: String,
+) -> Result<MediaInfo> {
+    let core = state.core.clone();
+    let path = core.authorize(&input_path)?;
+    let engines = core.engines()?;
+    let operation = core.reserve()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut info = engine::probe(&engines, &path, &NativeRunner, &operation.control)?;
+        let video_input = engine::is_video_input(&path)?;
+        info.formats = FORMATS
+            .iter()
+            .map(|&f| engine::availability(&engines.encoders, f, Some(&info), video_input))
+            .collect();
+        Ok(info)
+    })
+    .await
+    .map_err(|_| "Media inspection could not be completed.".to_string())?
+}
+
+pub fn command_args(
+    input: &Path,
+    temp: &Path,
+    format: OutputFormat,
+    media: &MediaInfo,
+) -> Result<Vec<String>> {
+    let mut args: Vec<String> = [
+        "-hide_banner",
+        "-nostdin",
+        "-y",
+        "-loglevel",
+        "error",
+        "-nostats",
+        "-progress",
+        "pipe:1",
+        "-protocol_whitelist",
+        "file,pipe",
+        "-format_whitelist",
+        "mov,matroska,webm,mp3,wav,flac,ogg",
+        "-i",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+    args.push(input.to_string_lossy().into_owned());
+    let (video_codec, audio_codec) = format.codecs();
+    if format.video() {
+        let video = media
+            .video
+            .as_ref()
+            .ok_or("No actual video stream is available.")?;
+        args.extend([
+            "-map".into(),
+            format!("0:{}", video.index),
+            "-c:v".into(),
+            video_codec.unwrap().into(),
+        ]);
+        args.extend(
+            [
+                "-pix_fmt",
+                "yuv420p",
+                "-vf",
+                "scale=ceil(iw/2)*2:ceil(ih/2)*2",
+            ]
+            .map(String::from),
+        );
+        if format == OutputFormat::Webm {
+            args.extend(
+                [
+                    "-crf",
+                    "32",
+                    "-b:v",
+                    "0",
+                    "-deadline",
+                    "good",
+                    "-cpu-used",
+                    "2",
+                ]
+                .map(String::from),
+            );
+        } else {
+            args.extend(["-preset", "medium", "-crf", "23"].map(String::from));
+        }
+    } else {
+        args.push("-vn".into());
+    }
+    if let Some(audio) = media.audio.as_ref() {
+        args.extend([
+            "-map".into(),
+            format!("0:{}", audio.index),
+            "-c:a".into(),
+            audio_codec.into(),
+        ]);
+        match format {
+            OutputFormat::Mp3 => args.extend(["-q:a", "2", "-ac", "2"].map(String::from)),
+            OutputFormat::Flac => args.extend(["-compression_level", "5"].map(String::from)),
+            OutputFormat::Wav => {}
+            OutputFormat::Webm => args.extend(["-b:a", "128k"].map(String::from)),
+            _ => args.extend(["-b:a", "192k"].map(String::from)),
+        }
+    } else if !format.video() {
+        return Err("This file has no audio stream to convert or extract.".into());
+    }
+    args.extend(["-sn", "-dn", "-map_metadata", "-1", "-map_chapters", "-1"].map(String::from));
+    if matches!(format, OutputFormat::Mp4 | OutputFormat::M4a) {
+        args.extend(["-movflags", "+faststart"].map(String::from));
+    }
+    let container = match format {
+        OutputFormat::Mkv => "matroska",
+        OutputFormat::M4a => "ipod",
+        _ => format.extension(),
+    };
+    args.extend([
+        "-f".into(),
+        container.into(),
+        temp.to_string_lossy().into_owned(),
+    ]);
+    Ok(args)
+}
+
+pub fn progress_seconds(line: &str) -> Option<f64> {
+    let (key, value) = line.trim().split_once('=')?;
+    let seconds = match key {
+        "out_time_us" => value.parse::<f64>().ok()? / 1_000_000.0,
+        "out_time" => {
+            let parts: Vec<_> = value.split(':').collect();
+            if parts.len() != 3 {
+                return None;
+            }
+            parts[0].parse::<f64>().ok()? * 3600.0
+                + parts[1].parse::<f64>().ok()? * 60.0
+                + parts[2].parse::<f64>().ok()?
+        }
+        _ => return None,
+    };
+    (seconds.is_finite() && seconds >= 0.0).then_some(seconds)
+}
+
+pub fn destination_path(input: &Path, chosen: &Path, format: OutputFormat) -> Result<PathBuf> {
+    let mut destination = chosen.to_path_buf();
+    destination.set_extension(format.extension());
+    let parent = destination
+        .parent()
+        .ok_or("Choose a destination folder.")?
+        .canonicalize()
+        .map_err(|_| "The destination folder is missing or inaccessible.".to_string())?;
+    if !parent.is_dir() {
+        return Err("Choose a valid destination folder.".into());
+    }
+    destination = parent.join(
+        destination
+            .file_name()
+            .ok_or("Choose a destination filename.")?,
+    );
+    let input = input
+        .canonicalize()
+        .map_err(|_| "The input file is missing or inaccessible.".to_string())?;
+    let identical = if cfg!(windows) {
+        input
+            .to_string_lossy()
+            .eq_ignore_ascii_case(&destination.to_string_lossy())
+    } else {
+        input == destination
+    };
+    if identical {
+        return Err("The destination is the input file. Choose a different filename to preserve the original.".into());
+    }
+    match std::fs::symlink_metadata(&destination){
+        Ok(_)=>return Err("That destination already exists. Choose another filename; existing files are never overwritten.".into()),
+        Err(error) if error.kind()==std::io::ErrorKind::NotFound=>{},
+        Err(_)=>return Err("The destination could not be checked. Choose another filename or folder.".into()),
+    }
+    Ok(destination)
+}
+
+fn validate_output(format: OutputFormat, input: &MediaInfo, output: &MediaInfo) -> Result<()> {
+    let expected_video = match format {
+        OutputFormat::Mp4 | OutputFormat::Mkv => Some("h264"),
+        OutputFormat::Webm => Some("vp9"),
+        _ => None,
+    };
+    let expected_audio = match format {
+        OutputFormat::Webm => "opus",
+        OutputFormat::Mp3 => "mp3",
+        OutputFormat::Wav => "pcm_s16le",
+        OutputFormat::Flac => "flac",
+        _ => "aac",
+    };
+    if expected_video.is_some_and(|codec| output.video.as_ref().is_none_or(|s| s.codec != codec))
+        || ((!format.video() || input.audio.is_some())
+            && output
+                .audio
+                .as_ref()
+                .is_none_or(|s| s.codec != expected_audio))
+    {
+        return Err("The output did not contain the expected encoded streams. No destination file was published.".into());
+    }
+    let required = match format {
+        OutputFormat::Mp4 | OutputFormat::M4a => "mov",
+        OutputFormat::Mkv | OutputFormat::Webm => "matroska",
+        _ => format.extension(),
+    };
+    if !output.container.split(',').any(|s| s == required) {
+        return Err(
+            "The output container could not be validated. No destination file was published."
+                .into(),
+        );
+    }
+    Ok(())
+}
+
+pub fn convert_to(
+    engines: &Engines,
+    input: &Path,
+    chosen: &Path,
+    format: OutputFormat,
+    media: &MediaInfo,
+    control: &Control,
+    runner: &dyn Runner,
+    progress: Option<LineHandler>,
+    verifying: impl FnOnce(),
+) -> Result<PathBuf> {
+    control.check()?;
+    let available = engine::availability(
+        &engines.encoders,
+        format,
+        Some(media),
+        engine::is_video_input(input)?,
+    );
+    if let Some(reason) = available.reason {
+        return Err(reason);
+    }
+    let destination = destination_path(input, chosen, format)?;
+    let temporary = tempfile::Builder::new()
+        .prefix(".clip-clip-go-")
+        .suffix(&format!(".{}", format.extension()))
+        .tempfile_in(destination.parent().unwrap())
+        .map_err(|_| {
+            "Cannot create a temporary file beside the destination. Check folder permissions."
+                .to_string()
+        })?
+        .into_temp_path();
+    let temporary_path = temporary.to_path_buf();
+    *control.temporary.lock().unwrap() = Some(temporary);
+    struct Cleanup<'a>(&'a Control);
+    impl Drop for Cleanup<'_> {
+        fn drop(&mut self) {
+            self.0.cleanup();
+        }
+    }
+    let _cleanup = Cleanup(control);
+    let args = command_args(input, &temporary_path, format, media)?;
+    let result = runner.run(&engines.ffmpeg, &args, control, None, progress)?;
+    control.check()?;
+    if !result.success {
+        let detail = result
+            .stderr
+            .lines()
+            .filter(|s| !s.trim().is_empty())
+            .take(3)
+            .collect::<Vec<_>>()
+            .join(" ");
+        return Err(format!(
+            "FFmpeg could not complete the conversion. {}",
+            detail.chars().take(600).collect::<String>()
+        ));
+    }
+    verifying();
+    if std::fs::metadata(&temporary_path)
+        .map(|m| m.len())
+        .unwrap_or(0)
+        == 0
+    {
+        return Err("FFmpeg produced an empty output. No destination file was published.".into());
+    }
+    let output = engine::probe(engines, &temporary_path, runner, control)?;
+    validate_output(format, media, &output)?;
+    let _publication = control.publication.lock().unwrap();
+    control.check()?;
+    // Atomic no-clobber publication on Windows. The RAII TempPath cleans up only this job's staging file.
+    let temporary = control.temporary.lock().unwrap().take().ok_or(CANCELLED)?;
+    temporary.persist_noclobber(&destination).map_err(|_|"Could not publish the output. The destination may now exist or be inaccessible. Choose another filename.".to_string())?;
+    Ok(destination)
+}
+
+#[tauri::command]
+pub fn start_conversion(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, Runtime>,
+    input_path: String,
+    format: OutputFormat,
+) -> Result<Job> {
+    let core = state.core.clone();
+    let input = core.authorize(&input_path)?;
+    let engines = core.engines()?;
+    let operation = core.reserve()?;
+    let id = core.sequence.fetch_add(1, Ordering::SeqCst) + 1;
+    let job = Job {
+        id,
+        revision: 0,
+        phase: JobPhase::Validating,
+        input_path,
+        destination: None,
+        format,
+        duration: None,
+        seconds: 0.0,
+        percent: None,
+        message: "Validating the selected media…".into(),
+    };
+    core.inner.lock().unwrap().job = Some(job.clone());
+    std::thread::spawn(move || {
+        let result = (|| -> Result<PathBuf> {
+            let media = engine::probe(&engines, &input, &NativeRunner, &operation.control)?;
+            let allowed = engine::availability(
+                &engines.encoders,
+                format,
+                Some(&media),
+                engine::is_video_input(&input)?,
+            );
+            if let Some(reason) = allowed.reason {
+                return Err(reason);
+            }
+            operation.control.check()?;
+            core.update(id, |j| {
+                j.phase = JobPhase::ChoosingDestination;
+                j.duration = media.duration;
+                j.message = "Choose a new destination filename in the Save dialog.".into();
+            });
+            let stem = input.file_stem().unwrap_or_default().to_string_lossy();
+            let chosen = window
+                .dialog()
+                .file()
+                .set_parent(&window)
+                .set_title("Save converted file without overwriting")
+                .set_file_name(format!("{stem}_converted.{}", format.extension()))
+                .add_filter(format.extension().to_uppercase(), &[format.extension()])
+                .blocking_save_file()
+                .ok_or(CANCELLED)?;
+            let chosen = chosen
+                .into_path()
+                .map_err(|_| "Could not access that destination.".to_string())?;
+            let destination = destination_path(&input, &chosen, format)?;
+            core.update(id, |j| {
+                j.phase = JobPhase::Running;
+                j.destination = Some(destination.to_string_lossy().into_owned());
+                j.message = "Converting…".into();
+            });
+            let progress_core = core.clone();
+            let progress: LineHandler = Box::new(move |line| {
+                if let Some(seconds) = progress_seconds(line) {
+                    progress_core.update(id, |j| {
+                        if j.phase == JobPhase::Running {
+                            j.seconds = j.seconds.max(seconds);
+                            j.percent =
+                                j.duration.map(|d| (j.seconds / d * 100.0).clamp(0.0, 99.0));
+                        }
+                    });
+                }
+            });
+            convert_to(
+                &engines,
+                &input,
+                &destination,
+                format,
+                &media,
+                &operation.control,
+                &NativeRunner,
+                Some(progress),
+                || {
+                    core.update(id, |j| {
+                        j.phase = JobPhase::Verifying;
+                        j.message = "Validating the completed output…".into();
+                    });
+                },
+            )
+        })();
+        // A terminal snapshot must imply that the native operation slot is free.
+        drop(operation);
+        core.update(id, |j| match result {
+            Ok(path) => {
+                j.phase = JobPhase::Succeeded;
+                j.percent = Some(100.0);
+                j.destination = Some(path.to_string_lossy().into_owned());
+                j.message = "Conversion completed and output validated.".into();
+            }
+            Err(message) => {
+                j.phase = if message == CANCELLED {
+                    JobPhase::Cancelled
+                } else {
+                    JobPhase::Failed
+                };
+                j.message = message;
+            }
+        });
+    });
+    Ok(job)
+}
+#[tauri::command]
+pub fn get_conversion_status(state: tauri::State<'_, Runtime>) -> Option<Job> {
+    state.core.job()
+}
+#[tauri::command]
+pub fn cancel_conversion(state: tauri::State<'_, Runtime>, id: u64) -> Result<()> {
+    let core = &state.core;
+    let control = {
+        let mut inner = core.inner.lock().unwrap();
+        let job = inner.job.as_mut().ok_or("No conversion is active.")?;
+        if job.id != id || !job.phase.busy() {
+            return Err("This conversion is no longer active.".into());
+        }
+        job.phase = JobPhase::Cancelling;
+        job.revision += 1;
+        job.message = "Cancelling and cleaning up the temporary output…".into();
+        inner.active.clone()
+    };
+    if let Some(control) = control {
+        control.cancel();
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests;

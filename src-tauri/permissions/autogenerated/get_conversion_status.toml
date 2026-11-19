@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-conversion-status"
+description = "Enables the get_conversion_status command without any pre-configured scope."
+commands.allow = ["get_conversion_status"]
+
+[[permission]]
+identifier = "deny-get-conversion-status"
+description = "Denies the get_conversion_status command without any pre-configured scope."
+commands.deny = ["get_conversion_status"]

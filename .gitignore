@@ -4,6 +4,9 @@ src-tauri/target/
 src-tauri/gen/schemas/
 .npm-cache/
 .cargo-cache/
+.engine-cache/
+src-tauri/binaries/*.exe
+src-tauri/binaries/*.preparing-*
 *.log
 *.tsbuildinfo
 .env

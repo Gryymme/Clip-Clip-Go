@@ -17,6 +17,7 @@ pub enum SelectionError {
     PermissionDenied,
     NotAFile,
     MetadataError,
+    Busy,
 }
 
 fn file_metadata(path: &Path) -> Result<MediaFile, SelectionError> {
@@ -41,7 +42,12 @@ fn file_metadata(path: &Path) -> Result<MediaFile, SelectionError> {
 pub async fn select_media_file(
     window: tauri::WebviewWindow,
     extensions: Vec<String>,
+    state: tauri::State<'_, crate::conversion::Runtime>,
 ) -> Result<Option<MediaFile>, SelectionError> {
+    let core = state.core.clone();
+    if core.busy() {
+        return Err(SelectionError::Busy);
+    }
     tauri::async_runtime::spawn_blocking(move || {
         let extensions: Vec<&str> = extensions.iter().map(String::as_str).collect();
         let chosen = window
@@ -56,7 +62,9 @@ pub async fn select_media_file(
                 let path = file
                     .into_path()
                     .map_err(|_| SelectionError::MetadataError)?;
-                file_metadata(&path)
+                let info = file_metadata(&path)?;
+                core.remember(&path);
+                Ok(info)
             })
             .transpose()
     })

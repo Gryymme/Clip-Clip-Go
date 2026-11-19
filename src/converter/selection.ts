@@ -15,13 +15,15 @@ export interface SelectionState {
   selecting: boolean;
   error: string | null;
   notice: string;
+  locked: boolean;
 }
 
 export const initialSelection: SelectionState = {
-  file: null, output: '', selecting: false, error: null, notice: '',
+  file: null, output: '', selecting: false, error: null, notice: '', locked: false,
 };
 
 export type SelectionAction =
+  | { type: 'lock'; locked: boolean }
   | { type: 'start' }
   | { type: 'selected'; file: NativeFile | null }
   | { type: 'failed'; message: string }
@@ -29,8 +31,11 @@ export type SelectionAction =
   | { type: 'remove' };
 
 export function selectionReducer(state: SelectionState, action: SelectionAction): SelectionState {
+  if (state.locked && action.type !== 'lock') return state;
   switch (action.type) {
+    case 'lock': return { ...state, locked: action.locked };
     case 'start':
+      if (state.locked) return state;
       return { ...state, selecting: true, error: null, notice: '' };
     case 'selected': {
       if (!state.selecting) return state;
@@ -44,16 +49,16 @@ export function selectionReducer(state: SelectionState, action: SelectionAction)
       return {
         file: { ...action.file, ...input },
         output: isCompatible(input.format, state.output) ? state.output : outputFormats(input.format)[0],
-        selecting: false, error: null, notice: 'File selected. Choose an output format.',
+        selecting: false, error: null, notice: 'File selected. Choose an output format.', locked: false,
       };
     }
     case 'failed':
       return { ...state, selecting: false, error: action.message, notice: '' };
     case 'output':
-      if (state.selecting || !state.file || !isCompatible(state.file.format, action.format)) return state;
+      if (state.locked || state.selecting || !state.file || !isCompatible(state.file.format, action.format)) return state;
       return { ...state, output: action.format };
     case 'remove':
-      return state.selecting ? state : { ...initialSelection, notice: 'Selected file removed.' };
+      return state.locked || state.selecting ? state : { ...initialSelection, notice: 'Selected file removed.' };
   }
 }
 
@@ -63,6 +68,7 @@ export function selectionError(error: unknown): string {
     case 'desktopRequired': return 'File selection is available in the Clip-Clip-Go desktop app. Open the desktop app and try again.';
     case 'missingFile': return 'The selected file could not be found. It may have been moved or deleted. Choose the file again.';
     case 'notAFile': return 'The selection is not a regular file. Choose a supported video, audio, image, or document file.';
+    case 'busy': return 'A conversion is active. Finish or cancel it before choosing another file.';
     case 'permissionDenied': return 'The file details could not be accessed. Check your file permissions or choose another file.';
     default: return 'The file details could not be loaded. Try selecting the file again, or choose another file.';
   }

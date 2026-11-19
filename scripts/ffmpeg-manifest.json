@@ -1,0 +1,136 @@
+{
+  "schemaVersion": 1,
+  "target": "x86_64-pc-windows-msvc",
+  "provider": "Gyan Doshi / gyan.dev",
+  "providerUrl": "https://www.gyan.dev/ffmpeg/builds/",
+  "providerLinkedFrom": "https://ffmpeg.org/download.html#build-windows",
+  "version": "9.0.2-essentials_build-www.gyan.dev",
+  "license": "GPL-3.0-or-later",
+  "archive": {
+    "url": "https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-9.0.2-essentials_build.zip",
+    "fileName": "ffmpeg-9.0.2-essentials_build.zip",
+    "sha256": "60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba",
+    "checksumUrl": "https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-9.0.2-essentials_build.zip.sha256",
+    "root": "ffmpeg-9.0.2-essentials_build"
+  },
+  "source": {
+    "providerReportedCommit": "946fcce07b",
+    "url": "https://github.com/FFmpeg/FFmpeg/commit/946fcce07b6dcd0331c8cc609192aeff5e1924f8",
+    "releaseTag": "n9.0.2",
+    "completeCorrespondingSourceAssembled": false,
+    "commit": "946fcce07b6dcd0331c8cc609192aeff5e1924f8",
+    "archiveUrl": "https://github.com/FFmpeg/FFmpeg/archive/946fcce07b6dcd0331c8cc609192aeff5e1924f8.tar.gz"
+  },
+  "binaries": {
+    "ffmpeg": {
+      "sha256": "3256173f3f8bffd7df12227c68adf68025edb1832273a9530688a7bb1ed8edec"
+    },
+    "ffprobe": {
+      "sha256": "f0d36ecbbdd3bcfac3efa078c96c7271c2e68b3810595552ac3b7f17e9a65c52"
+    }
+  },
+  "archiveNotices": [
+    {
+      "entry": "LICENSE",
+      "file": "COPYING.GPLv3.txt",
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+    },
+    {
+      "entry": "README.txt",
+      "file": "UPSTREAM-README.txt",
+      "sha256": "0342de6bb39dd421cbec2c00d89ad274b640d75ad3f2cab09ffd647ce2d8f949"
+    }
+  ],
+  "requiredEncoders": [
+    "libx264",
+    "aac",
+    "libvpx-vp9",
+    "libopus",
+    "libmp3lame",
+    "pcm_s16le",
+    "flac"
+  ],
+  "configuration": "--enable-gpl --enable-version3 --enable-static --disable-w32threads --disable-autodetect --enable-cairo --enable-fontconfig --enable-iconv --enable-gnutls --enable-libxml2 --enable-gmp --enable-bzlib --enable-lzma --enable-zlib --enable-libsrt --enable-libssh --enable-libzmq --enable-avisynth --enable-sdl2 --enable-libwebp --enable-libx264 --enable-libx265 --enable-libxvid --enable-libaom --enable-libopenjpeg --enable-libvpx --enable-mediafoundation --enable-libass --enable-libfreetype --enable-libfribidi --enable-libharfbuzz --enable-libvidstab --enable-libvmaf --enable-libzimg --enable-amf --enable-cuda-llvm --enable-cuvid --enable-dxva2 --enable-d3d11va --enable-d3d12va --enable-ffnvcodec --enable-libvpl --enable-nvdec --enable-nvenc --enable-vaapi --enable-openal --enable-libgme --enable-libopenmpt --enable-libopencore-amrwb --enable-libmp3lame --enable-libtheora --enable-libvo-amrwbenc --enable-libgsm --enable-libopencore-amrnb --enable-libopus --enable-libspeex --enable-libvorbis --enable-librubberband",
+  "compiler": "built with gcc 16.2.0 (Rev3, Built by MSYS2 project)",
+  "systemDllImports": {
+    "ffmpeg": [
+      "ADVAPI32.dll",
+      "AVICAP32.dll",
+      "AVRT.dll",
+      "CRYPT32.dll",
+      "GDI32.dll",
+      "IPHLPAPI.DLL",
+      "KERNEL32.dll",
+      "MSIMG32.dll",
+      "OLEAUT32.dll",
+      "SHELL32.dll",
+      "SHLWAPI.dll",
+      "USER32.dll",
+      "WINMM.dll",
+      "WS2_32.dll",
+      "api-ms-win-crt-conio-l1-1-0.dll",
+      "api-ms-win-crt-convert-l1-1-0.dll",
+      "api-ms-win-crt-environment-l1-1-0.dll",
+      "api-ms-win-crt-filesystem-l1-1-0.dll",
+      "api-ms-win-crt-heap-l1-1-0.dll",
+      "api-ms-win-crt-locale-l1-1-0.dll",
+      "api-ms-win-crt-math-l1-1-0.dll",
+      "api-ms-win-crt-multibyte-l1-1-0.dll",
+      "api-ms-win-crt-private-l1-1-0.dll",
+      "api-ms-win-crt-runtime-l1-1-0.dll",
+      "api-ms-win-crt-stdio-l1-1-0.dll",
+      "api-ms-win-crt-string-l1-1-0.dll",
+      "api-ms-win-crt-time-l1-1-0.dll",
+      "api-ms-win-crt-utility-l1-1-0.dll",
+      "bcrypt.dll",
+      "ncrypt.dll",
+      "ole32.dll"
+    ],
+    "ffprobe": [
+      "ADVAPI32.dll",
+      "AVICAP32.dll",
+      "AVRT.dll",
+      "CRYPT32.dll",
+      "GDI32.dll",
+      "IPHLPAPI.DLL",
+      "KERNEL32.dll",
+      "MSIMG32.dll",
+      "OLEAUT32.dll",
+      "SHELL32.dll",
+      "SHLWAPI.dll",
+      "USER32.dll",
+      "WINMM.dll",
+      "WS2_32.dll",
+      "api-ms-win-crt-convert-l1-1-0.dll",
+      "api-ms-win-crt-environment-l1-1-0.dll",
+      "api-ms-win-crt-filesystem-l1-1-0.dll",
+      "api-ms-win-crt-heap-l1-1-0.dll",
+      "api-ms-win-crt-locale-l1-1-0.dll",
+      "api-ms-win-crt-math-l1-1-0.dll",
+      "api-ms-win-crt-multibyte-l1-1-0.dll",
+      "api-ms-win-crt-private-l1-1-0.dll",
+      "api-ms-win-crt-runtime-l1-1-0.dll",
+      "api-ms-win-crt-stdio-l1-1-0.dll",
+      "api-ms-win-crt-string-l1-1-0.dll",
+      "api-ms-win-crt-time-l1-1-0.dll",
+      "api-ms-win-crt-utility-l1-1-0.dll",
+      "bcrypt.dll",
+      "ncrypt.dll",
+      "ole32.dll"
+    ]
+  },
+  "noticeFiles": {
+    "BINARY-LICENSE.txt": "fa6404b0ec69a95bdd56a10b58a987b89d6e58cf50376f9b38e7f2e8ea58d850",
+    "BUILD-CONFIG.txt": "8b508a29ede5ba7e1f53f9f983c9aadcfb9a3988ab6bdafec9b114ed0aa5cdf4",
+    "COPYING.GPLv2.txt": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643",
+    "COPYING.GPLv3.txt": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+    "COPYING.LGPLv2.1.txt": "246041b6ecf9bc32d718a62c57877c78b5eb397b6467e74ed7ae2626ab189c30",
+    "COPYING.LGPLv3.txt": "da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768",
+    "ffmpeg-version.txt": "711056f2bc922237113d5defe7da4dbd97beaab41098e5f8d425753dbfea99ff",
+    "ffprobe-version.txt": "c28ec08933e2c9eeac8a7341b1fced84e23745c7ca69e26e7ca83226714ef209",
+    "NOTICE.md": "60ee28afac95c2a111a7f2f1f894243d27e42674f59420c66e8450ab8a1b37d6",
+    "PROVENANCE.json": "675b05ab024936e455405fc68f1848f9d1cab3560ea38205e1ddb8340a4c6500",
+    "UPSTREAM-LICENSE.md": "2e1d16c72fd74e12063776371da757322f8b77589386532f4fd8634bde7de1af",
+    "UPSTREAM-README.txt": "0342de6bb39dd421cbec2c00d89ad274b640d75ad3f2cab09ffd647ce2d8f949"
+  }
+}

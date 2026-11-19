@@ -5,6 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "engines:prepare": "node scripts/prepare-engines.mjs",
+    "engines:verify": "node scripts/prepare-engines.mjs --verify-only",
+    "desktop:dev": "npm run engines:prepare && npm run dev",
+    "desktop:build": "npm run engines:prepare && npm run build",
     "test": "node --experimental-strip-types --test tests/*.test.mjs",
     "typecheck": "tsc --noEmit",
     "build": "npm run typecheck && vite build",

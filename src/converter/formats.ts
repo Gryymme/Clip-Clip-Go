@@ -11,7 +11,7 @@ const textDocumentOutputs = ['pdf', 'docx', 'odt', 'txt'] as const;
 const presentationOutputs = ['pdf', 'pptx', 'odp'] as const;
 const spreadsheetOutputs = ['pdf', 'xlsx', 'ods', 'csv'] as const;
 
-// Planned selection routes, not engine capability claims. Keep input-specific rules here.
+// Selection compatibility. Image/document routes remain planned; native encoders gate audio/video.
 const inputRules = {
   mp4: { category: 'video', outputs: videoRoutes },
   mkv: { category: 'video', outputs: videoRoutes },
@@ -79,7 +79,7 @@ export function outputGroups(input: InputFormat): { label: string; formats: read
   if (inputRules[input].category === 'video') {
     return [{ label: 'Video', formats: videoOutputs }, { label: 'Extract audio', formats: audioOutputs }];
   }
-  return [{ label: 'Planned outputs', formats: outputFormats(input) }];
+  return [{ label: inputRules[input].category === 'audio' ? 'Audio' : 'Planned outputs', formats: outputFormats(input) }];
 }
 
 export function outputHelp(input: InputFormat, output: OutputFormat): string {
@@ -90,5 +90,6 @@ export function outputHelp(input: InputFormat, output: OutputFormat): string {
   }
   if (output === 'csv') return 'Spreadsheet-to-CSV may export only one sheet.';
   if (inputRules[input].category === 'video') return 'Choose a video format or extract audio from the video.';
+  if (inputRules[input].category === 'audio') return 'Choose an audio output format.';
   return `Choose a planned output for this ${categoryLabels[inputRules[input].category].toLowerCase()}.`;
 }

@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "identifier": "com.clipclipgo.app",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "npm run desktop:dev",
     "devUrl": "http://127.0.0.1:1420",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "npm run desktop:build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -27,7 +27,11 @@
     }
   },
   "bundle": {
-    "active": false,
+    "active": true,
+    "targets": ["msi"],
+    "useLocalToolsDir": true,
+    "externalBin": ["binaries/ffmpeg", "binaries/ffprobe"],
+    "resources": { "../third-party/ffmpeg/": "notices/ffmpeg/" },
     "icon": ["icons/icon.png", "icons/icon.ico"]
   }
 }

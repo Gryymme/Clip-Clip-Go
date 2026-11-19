@@ -23,6 +23,7 @@
   --color-border: #343a49;
   --color-on-accent: #171225;
   --color-error: #ffc4c4;
+  --color-success: #a5e4bd;
 
   --space-1: 0.25rem;
   --space-2: 0.5rem;
@@ -183,6 +184,7 @@ h2 { margin: 0 0 var(--space-3); font-size: var(--text-body); font-weight: var(-
 
 .converter { max-inline-size: 55rem; }
 .converter-section + .converter-section { margin-block-start: var(--space-7); }
+.converter > .supported-inputs { margin-block: var(--space-6); }
 .field-help { margin: var(--space-2) 0 0; color: var(--color-secondary); font-size: var(--text-small); }
 .supported-inputs summary { cursor: pointer; padding-block: var(--space-2); }
 .supported-inputs dl { display: grid; gap: var(--space-2); margin-block: var(--space-2) 0; }
@@ -239,6 +241,24 @@ select {
 select:disabled { opacity: 1; color: var(--color-secondary); border-color: var(--color-border); cursor: not-allowed; }
 .conversion-action { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-4); margin-block-start: var(--space-7); }
 .conversion-action p { margin: 0; }
+.conversion-job { margin-block-start: var(--space-6); padding-block-start: var(--space-5); border-block-start: 1px solid var(--color-border); }
+.job-message { margin-block: var(--space-3); }
+.job-message[data-phase="failed"] { color: var(--color-error); }
+.job-message[data-phase="succeeded"] { color: var(--color-success); }
+.engine-version, .engine-path { overflow-wrap: anywhere; }
+.engine-version, .engine-path span { font-family: var(--font-mono); }
+.numeric-value { font-variant-numeric: tabular-nums; }
+progress { appearance: none; display: block; inline-size: 100%; max-inline-size: 35rem; block-size: var(--space-3); border: 0; border-radius: var(--radius-control); background: var(--color-hover); accent-color: var(--color-accent); }
+progress::-webkit-progress-bar { background: var(--color-hover); border-radius: var(--radius-control); }
+progress::-webkit-progress-value { background: var(--color-accent); border-radius: var(--radius-control); }
+progress::-moz-progress-bar { background: var(--color-accent); border-radius: var(--radius-control); }
+/* A stationary striped track represents unknown progress without native theme animation. */
+progress:indeterminate, progress:indeterminate::-webkit-progress-bar { background: repeating-linear-gradient(135deg, var(--color-accent-surface) 0 var(--space-2), var(--color-hover) var(--space-2) var(--space-4)); }
+progress:indeterminate::-webkit-progress-value { background: transparent; }
+progress:indeterminate::-moz-progress-bar { background: transparent; }
+.media-summary { margin-block-start: var(--space-5); }
+.conversion-action .field-help { flex: 1 1 16rem; min-inline-size: 0; }
+@media (prefers-reduced-motion: reduce) { progress:indeterminate { animation: none; } }
 
 /* Rem-based sizing follows user text preferences; content can grow vertically. */
 @media (max-width: 48rem) {
