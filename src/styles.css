@@ -1,0 +1,46 @@
+:root {
+  font-family: "Segoe UI", system-ui, sans-serif;
+  color: #f0f2f7;
+  background: #11141c;
+  color-scheme: dark;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 360px; }
+button, a { -webkit-tap-highlight-color: transparent; }
+button { font: inherit; }
+:focus-visible { outline: 3px solid #b4a4ff; outline-offset: 4px; }
+.skip-link { position: fixed; top: 12px; left: 12px; z-index: 2; padding: 12px; color: #11141c; background: #d2c8ff; transform: translateY(-180%); }
+.skip-link:focus { transform: translateY(0); }
+.app-shell { display: flex; min-height: 100vh; }
+.sidebar { width: 240px; flex-shrink: 0; display: flex; flex-direction: column; padding: 32px 20px 24px; border-right: 1px solid #343a49; background: #181c26; }
+.brand { display: flex; align-items: center; gap: 12px; margin-bottom: 44px; }
+.brand-mark { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: #b4a4ff; color: #171225; font-size: 24px; font-weight: 700; }
+.brand-name { margin: 0; font-weight: 700; font-size: 17px; }
+.brand-caption { margin: 4px 0 0; color: #b7bfd0; font-size: 12px; }
+nav { display: grid; gap: 8px; }
+nav button { width: 100%; text-align: left; border: 1px solid transparent; border-radius: 8px; padding: 12px 16px; background: transparent; color: #c5ccda; cursor: pointer; }
+nav button:hover { background: #272d3c; color: #fff; }
+nav button[aria-current="page"] { background: #342d50; border-color: #76669d; color: #eee8ff; font-weight: 600; }
+.sidebar-note { margin-top: auto; padding: 36px 12px 0; color: #b7bfd0; font-size: 12px; line-height: 1.7; }
+main { flex: 1; min-width: 0; padding: 48px clamp(24px, 5vw, 72px); }
+.page-header { margin-bottom: 36px; }
+.eyebrow { margin: 0 0 10px; color: #b7bfd0; text-transform: uppercase; letter-spacing: .15em; font-size: 11px; font-weight: 600; }
+h1 { margin: 0; font-size: 32px; letter-spacing: -.025em; }
+.placeholder { max-width: 780px; padding: 36px; border: 1px solid #343a49; border-radius: 16px; background: #1b202c; }
+.status-label { display: inline-block; padding: 5px 10px; border-radius: 6px; background: #33304a; color: #d2c8ff; font-size: 12px; font-weight: 600; }
+h2 { margin: 24px 0 12px; font-size: 22px; line-height: 1.4; }
+.placeholder p { color: #c5ccda; line-height: 1.7; }
+.placeholder .placeholder-note { margin: 28px 0 0; padding-top: 24px; border-top: 1px solid #343a49; color: #b7bfd0; font-size: 13px; }
+@media (max-width: 640px) {
+  .app-shell { flex-direction: column; }
+  .sidebar { width: 100%; padding: 20px; border-right: 0; border-bottom: 1px solid #343a49; }
+  .brand { margin-bottom: 24px; }
+  nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sidebar-note { margin: 16px 0 0; padding: 0; }
+  main { padding: 28px 20px; }
+  .placeholder { padding: 24px; }
+}
