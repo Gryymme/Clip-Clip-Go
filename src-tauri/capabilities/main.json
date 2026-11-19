@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main",
+  "description": "Allow the main local window to select one media file and receive its metadata.",
+  "local": true,
+  "windows": ["main"],
+  "permissions": ["allow-select-media-file"]
+}

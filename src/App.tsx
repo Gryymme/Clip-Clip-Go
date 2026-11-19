@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useReducer, useRef, useState } from 'react';
+import Converter from './converter/Converter';
+import { initialSelection, selectionReducer } from './converter/selection';
 
 const pages = [
   { name: 'Downloader', description: 'A future home for authorized media downloads.' },
@@ -10,6 +12,8 @@ const pages = [
 
 export default function App() {
   const [activePage, setActivePage] = useState<(typeof pages)[number]>(pages[0]);
+  const [selection, dispatchSelection] = useReducer(selectionReducer, initialSelection);
+  const selectionBusy = useRef(false);
 
   return (
     <div className="app-shell">
@@ -37,11 +41,11 @@ export default function App() {
         <header className="page-header">
           <h1>{activePage.name}</h1>
         </header>
-        <section className="placeholder" aria-labelledby="placeholder-title" aria-live="polite" aria-atomic="true">
+        {activePage.name === 'Converter' ? <Converter state={selection} dispatch={dispatchSelection} busy={selectionBusy} /> : <section className="placeholder" aria-labelledby="placeholder-title" aria-live="polite" aria-atomic="true">
           <h2 id="placeholder-title">Not implemented yet</h2>
           <p>{activePage.description}</p>
           <p className="placeholder-note">This preview provides navigation only. No files or jobs are processed.</p>
-        </section>
+        </section>}
       </main>
     </div>
   );
