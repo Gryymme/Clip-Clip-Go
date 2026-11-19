@@ -36,7 +36,7 @@ test('replacement preserves compatible output and resets an incompatible one', (
 
 test('unsupported files and native errors keep the previous usable selection', () => {
   for (const before of [initialSelection, select(initialSelection, file())]) {
-    const unsupported = select(before, file('report.pdf'));
+    const unsupported = select(before, file('report.exe'));
     assert.match(unsupported.error, /Unsupported file extension/);
     assert.deepEqual(unsupported.file, before.file);
     assert.equal(unsupported.output, before.output);
@@ -80,4 +80,60 @@ test('file sizes handle zero, singular, large values and exact byte counts', () 
   assert.match(formatFileSize('1024'), /1 KiB/);
   assert.match(formatFileSize('18446744073709551615'), /EiB/);
   assert.ok(formatFileSize('9007199254740993').includes(new Intl.NumberFormat().format(9007199254740993n)));
+});
+
+test('image aliases retain original metadata and a canonical input format', () => {
+  for (const [name, format] of [['最終版本.JpEg', 'jpg'], ['scan.TIF', 'tiff']]) {
+    const native = { ...file(name), sizeBytes: '0' };
+    const selected = select(initialSelection, native);
+    assert.equal(selected.file.category, 'image');
+    assert.equal(selected.file.format, format);
+    assert.equal(selected.file.name, native.name);
+    assert.equal(selected.file.path, native.path);
+    assert.equal(selected.file.sizeBytes, native.sizeBytes);
+    assert.equal(selected.output, 'jpg');
+  }
+});
+
+test('document output validation uses the specific input, not just its category', () => {
+  const docx = reduce(select(initialSelection, file('report.DOCX')), { type: 'output', format: 'docx' });
+  const pdf = select(docx, file('report.PDF'));
+  assert.equal(pdf.file.category, 'document');
+  assert.equal(pdf.file.format, 'pdf');
+  assert.equal(pdf.output, 'txt');
+  assert.equal(reduce(pdf, { type: 'output', format: 'docx' }), pdf);
+  const text = select(pdf, file('notes.TXT'));
+  assert.equal(text.output, 'pdf');
+  assert.equal(reduce(text, { type: 'output', format: 'txt' }), text);
+  const sheet = reduce(select(text, file('budget.xlsx')), { type: 'output', format: 'csv' });
+  assert.equal(sheet.output, 'csv');
+  assert.equal(select(sheet, file('slides.pptx')).output, 'pdf');
+});
+
+test('replacement across categories retains only still-valid output choices', () => {
+  const image = reduce(select(initialSelection, file('photo.jpeg')), { type: 'output', format: 'png' });
+  const pdf = select(image, file('report.pdf'));
+  assert.equal(pdf.output, 'png');
+  assert.equal(select(pdf, file('photo.tif')).output, 'png');
+  const audio = select(image, file('music.ogg'));
+  assert.equal(audio.output, 'mp3');
+  assert.equal(reduce(audio, { type: 'output', format: 'png' }), audio);
+});
+
+test('cancel, errors and removal preserve the same guarantees for the new categories', () => {
+  for (const name of ['photo.jpeg', 'scan.tif', 'report.docx', 'deck.odp', 'sheet.ods', 'report.pdf']) {
+    const original = select(initialSelection, file(name));
+    const cancelled = select(original, null);
+    assert.deepEqual(cancelled.file, original.file);
+    assert.equal(cancelled.output, original.output);
+    const failed = reduce(reduce(original, { type: 'start' }), { type: 'failed', message: 'Unable to access file.' });
+    assert.deepEqual(failed.file, original.file);
+    assert.equal(failed.output, original.output);
+    const unsupported = select(original, file('unrelated.zip'));
+    assert.deepEqual(unsupported.file, original.file);
+    assert.equal(unsupported.output, original.output);
+    const removed = reduce(original, { type: 'remove' });
+    assert.equal(removed.file, null);
+    assert.equal(removed.output, '');
+  }
 });

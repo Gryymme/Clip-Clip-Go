@@ -6,11 +6,26 @@ The working foundation uses Tauri 2, React, TypeScript, Vite, npm, and plain CSS
 
 ## Converter
 
-The Converter selects one local file through a native Windows file dialog and displays its name, full path, exact size, and preliminary video/audio category. Metadata comes from the native layer without loading the file contents into memory. Replace and remove controls are available; cancellation or an unsuccessful replacement preserves the previous selection.
+The Converter selects one local file through a native Windows file dialog and displays its name, full path, exact size, and preliminary video, audio, image, or document category. Metadata comes from the native layer without loading the file contents into memory. Replace and remove controls are available; cancellation or an unsuccessful replacement preserves the previous selection.
 
-Supported inputs: MP4, MKV, WebM, MOV, MP3, WAV, FLAC, M4A, and OGG. Video inputs offer MP4, MKV, WebM, or audio extraction to MP3, WAV, FLAC, and M4A. Audio inputs offer MP3, WAV, FLAC, and M4A. Compatible output choices are retained when replacing a file. The selected file and format survive page navigation during the current session and reset when the application is reloaded or closed.
+The selection UI offers the following **planned conversion routes**, whose actual support will be validated when conversion engines are integrated:
 
-**Conversion is not available yet.** The Convert button is disabled. Categorization uses the filename extension; FFprobe validation and actual conversion are not implemented. Downloader, Queue, History, and Settings remain placeholders. There is no downloading, job processing, database, batch processing, or persistence.
+| Input | Planned outputs |
+| --- | --- |
+| MP4, MKV, WebM, MOV | MP4, MKV, WebM; audio extraction to MP3, WAV, FLAC, M4A |
+| MP3, WAV, FLAC, M4A, OGG | MP3, WAV, FLAC, M4A |
+| JPG/JPEG, PNG, WebP, BMP, TIFF/TIF | JPG, PNG, WebP, BMP, TIFF |
+| DOC, DOCX, ODT, RTF | PDF, DOCX, ODT, TXT |
+| TXT | PDF, DOCX, ODT |
+| PPT, PPTX, ODP | PDF, PPTX, ODP |
+| XLS, XLSX, ODS | PDF, XLSX, ODS, CSV |
+| PDF | TXT, PNG, JPG |
+
+Extension matching is case-insensitive; JPEG/JPG and TIF/TIFF use the same routes. Output choices are specific to the input format. PDF-to-text will initially require a text-based PDF; scanned documents need OCR, which is not offered. PDF-to-image is planned to produce one image per page, and spreadsheet-to-CSV may export only one sheet. PDF-to-Word and unrelated cross-category routes are not offered.
+
+Compatible output choices are retained when replacing a file. The selected file and format survive page navigation during the current session and reset when the application is reloaded or closed.
+
+**Conversion is not available yet.** The Convert button is disabled. Categorization uses the filename extension; content inspection, FFprobe validation, and actual conversion are not implemented. Downloader, Queue, History, and Settings remain placeholders. There is no downloading, job processing, database, batch processing, or persistence.
 
 ## Development
 
@@ -40,4 +55,6 @@ The Tauri CLI is a local development dependency. Node.js/npm, Rust with the MSVC
 - `cargo check --manifest-path src-tauri/Cargo.toml`: native checking.
 - `cargo test --manifest-path src-tauri/Cargo.toml`: native metadata tests.
 
-These checks passed for the selection milestone. Browser checks with test-only native responses covered long filenames and paths, 320–2560px widths, 200% text, and selection retention across navigation. The desktop app compiled and launched, and its Converter screen was inspected. Native UI automation was stopped before the file-dialog result could be verified; manually confirm selecting and cancelling in the dialog, displayed metadata, and output choices for both a video and an audio file.
+The user confirmed that audio/video selection and appropriate output choices work. Manual functionality testing, including native file dialogs, is performed by the user; image/document selection still needs that confirmation. Automated checks do not establish manual verification.
+
+Manual checklist: select images including JPEG/TIF aliases and mixed-case extensions; select a text document, presentation, spreadsheet, and PDF to check their distinct outputs and contextual notes; test cancel, replace, remove, and navigation retention; recheck audio/video selections. Convert must remain disabled throughout.

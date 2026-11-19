@@ -48,8 +48,8 @@ pub async fn select_media_file(
             .dialog()
             .file()
             .set_parent(&window)
-            .set_title("Select a video or audio file")
-            .add_filter("Video and audio", &extensions)
+            .set_title("Select a file")
+            .add_filter("Video, audio, images and documents", &extensions)
             .blocking_pick_file();
         chosen
             .map(|file| {

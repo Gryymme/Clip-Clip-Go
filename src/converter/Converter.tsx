@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import type { Dispatch } from 'react';
-import { audioOutputs, supportedInputLabel, videoOutputs } from './formats';
+import { categoryLabels, inputGroups, outputGroups, outputHelp } from './formats';
 import { selectMediaFile } from './native';
 import { formatFileSize, selectionError } from './selection';
 import type { SelectionAction, SelectionState } from './selection';
@@ -34,8 +34,14 @@ export default function Converter({ state, dispatch, busy }: {
   return (
     <div className="converter">
       <section className="converter-section" aria-labelledby="input-heading">
-        <h2 id="input-heading">Select a video or audio file</h2>
-        <p className="field-help" id="input-help">Supported inputs: {supportedInputLabel}.</p>
+        <h2 id="input-heading">Select a file</h2>
+        <p className="field-help" id="input-help">Choose one video, audio, image, or document file.</p>
+        <details className="supported-inputs field-help">
+          <summary>Supported input formats</summary>
+          <dl>{inputGroups.map(group => <div key={group.label}>
+            <dt>{group.label}</dt><dd>{group.extensions.map(extension => extension.toUpperCase()).join(', ')}</dd>
+          </div>)}</dl>
+        </details>
         <div className="action-row">
           <button className="button button-primary" type="button" ref={selectButton}
             aria-describedby="input-help" aria-disabled={selecting} onClick={selectFile}>
@@ -52,9 +58,9 @@ export default function Converter({ state, dispatch, busy }: {
           <div><dt>File name</dt><dd className="file-name" dir="auto">{file.name}</dd></div>
           <div><dt>Full path</dt><dd className="file-path" dir="auto">{file.path}</dd></div>
           <div><dt>Size</dt><dd className="file-size">{formatFileSize(file.sizeBytes)}</dd></div>
-          <div><dt>Category</dt><dd>{file.category === 'video' ? 'Video' : 'Audio'} (based on extension)</dd></div>
+          <div><dt>Category</dt><dd>{categoryLabels[file.category]} (based on extension)</dd></div>
         </dl> : <p className="field-help">No file selected.</p>}
-        <p className="field-help">File type is preliminary, based on its extension. Actual media validation with FFprobe will be added later.</p>
+        <p className="field-help">File type is preliminary, based on its extension. Content inspection is not implemented yet.</p>
       </section>
       <section className="converter-section" aria-labelledby="output-heading">
         <h2 id="output-heading">Choose an output format</h2>
@@ -62,14 +68,12 @@ export default function Converter({ state, dispatch, busy }: {
         <select id="output-format" value={state.output} disabled={!file || selecting}
           aria-describedby="output-help" onChange={event => dispatch({ type: 'output', format: event.target.value })}>
           {!file && <option value="">Select a file first</option>}
-          {file?.category === 'video' && <optgroup label="Video">
-            {videoOutputs.map(format => <option key={format} value={format}>{format.toUpperCase()}</option>)}
-          </optgroup>}
-          {file && <optgroup label={file.category === 'video' ? 'Extract audio' : 'Audio'}>
-            {audioOutputs.map(format => <option key={format} value={format}>{format.toUpperCase()}</option>)}
-          </optgroup>}
+          {file && outputGroups(file.format).map(group => <optgroup key={group.label} label={group.label}>
+            {group.formats.map(format => <option key={format} value={format}>{format.toUpperCase()}</option>)}
+          </optgroup>)}
         </select>
-        <p className="field-help" id="output-help">{!file ? 'Select a file to see its supported outputs.' : file.category === 'video' ? 'Choose a video format or extract audio from the video.' : 'Choose the audio format for this file.'}</p>
+        <p className="field-help" id="output-help">{file && state.output ? outputHelp(file.format, state.output) : 'Select a file to see its planned outputs.'}</p>
+        {file && <p className="field-help">These are planned conversion routes. Actual support will be validated when conversion engines are integrated.</p>}
       </section>
       <div className="conversion-action">
         <button className="button" type="button" disabled aria-describedby="conversion-limitation">Convert</button>

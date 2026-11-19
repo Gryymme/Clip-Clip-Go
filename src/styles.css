@@ -184,6 +184,10 @@ h2 { margin: 0 0 var(--space-3); font-size: var(--text-body); font-weight: var(-
 .converter { max-inline-size: 55rem; }
 .converter-section + .converter-section { margin-block-start: var(--space-7); }
 .field-help { margin: var(--space-2) 0 0; color: var(--color-secondary); font-size: var(--text-small); }
+.supported-inputs summary { cursor: pointer; padding-block: var(--space-2); }
+.supported-inputs dl { display: grid; gap: var(--space-2); margin-block: var(--space-2) 0; }
+.supported-inputs dt { font-weight: var(--weight-medium); color: var(--color-text); }
+.supported-inputs dd { margin: 0; overflow-wrap: anywhere; }
 .action-row { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-block-start: var(--space-5); }
 .button {
   min-inline-size: 0;

@@ -1,5 +1,5 @@
-import { categorizeFile, isCompatible, outputFormats, supportedInputLabel } from './formats.ts';
-import type { MediaCategory, OutputFormat } from './formats.ts';
+import { identifyFile, isCompatible, outputFormats, supportedInputLabel } from './formats.ts';
+import type { FileCategory, InputFormat, OutputFormat } from './formats.ts';
 
 export interface NativeFile {
   name: string;
@@ -8,7 +8,7 @@ export interface NativeFile {
   sizeBytes: string;
 }
 
-export interface SelectedFile extends NativeFile { category: MediaCategory }
+export interface SelectedFile extends NativeFile { category: FileCategory; format: InputFormat }
 export interface SelectionState {
   file: SelectedFile | null;
   output: OutputFormat | '';
@@ -37,20 +37,20 @@ export function selectionReducer(state: SelectionState, action: SelectionAction)
       if (action.file === null) {
         return { ...state, selecting: false, notice: 'File selection cancelled.' };
       }
-      const category = categorizeFile(action.file.name);
-      if (!category) {
+      const input = identifyFile(action.file.name);
+      if (!input) {
         return { ...state, selecting: false, error: `Unsupported file extension. Choose one of: ${supportedInputLabel}.` };
       }
       return {
-        file: { ...action.file, category },
-        output: isCompatible(category, state.output) ? state.output : outputFormats(category)[0],
+        file: { ...action.file, ...input },
+        output: isCompatible(input.format, state.output) ? state.output : outputFormats(input.format)[0],
         selecting: false, error: null, notice: 'File selected. Choose an output format.',
       };
     }
     case 'failed':
       return { ...state, selecting: false, error: action.message, notice: '' };
     case 'output':
-      if (state.selecting || !state.file || !isCompatible(state.file.category, action.format)) return state;
+      if (state.selecting || !state.file || !isCompatible(state.file.format, action.format)) return state;
       return { ...state, output: action.format };
     case 'remove':
       return state.selecting ? state : { ...initialSelection, notice: 'Selected file removed.' };
@@ -62,7 +62,7 @@ export function selectionError(error: unknown): string {
   switch (code) {
     case 'desktopRequired': return 'File selection is available in the Clip-Clip-Go desktop app. Open the desktop app and try again.';
     case 'missingFile': return 'The selected file could not be found. It may have been moved or deleted. Choose the file again.';
-    case 'notAFile': return 'The selection is not a regular file. Choose a video or audio file.';
+    case 'notAFile': return 'The selection is not a regular file. Choose a supported video, audio, image, or document file.';
     case 'permissionDenied': return 'The file details could not be accessed. Check your file permissions or choose another file.';
     default: return 'The file details could not be loaded. Try selecting the file again, or choose another file.';
   }
