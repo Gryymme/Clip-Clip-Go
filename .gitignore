@@ -15,3 +15,6 @@ src-tauri/binaries/*.preparing-*
 *.local
 *.pem
 *.key
+
+.agents/
+AGENTS.md
