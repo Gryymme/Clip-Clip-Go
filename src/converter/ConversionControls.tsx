@@ -31,7 +31,7 @@ export function ConversionActions({ controller: c, file, imagesMode = false }: {
     {c.error && <p className="selection-error" role="alert">{c.error}</p>}
     <section className="destination-section workflow-section" aria-labelledby="destination-heading">
       <h2 id="destination-heading">Destination</h2>
-      <div className="destination-row"><p className="field-help" id="destination-help">{c.busy ? 'A conversion is active. Finish or cancel it before starting another.' : folder ? 'Name a new output folder in the Save dialog. Existing folders are protected.' : 'Choose a new filename in the Save dialog. Originals and existing files are protected.'}</p>
+      <div className="destination-row"><p className="field-help" id="destination-help">{c.busy ? 'A download or conversion is active. Finish or cancel it before starting another.' : folder ? 'Name a new output folder in the Save dialog. Existing folders are protected.' : 'Choose a new filename in the Save dialog. Originals and existing files are protected.'}</p>
         <button className="button button-primary" type="button" disabled={disabled} aria-describedby="destination-help" onClick={() => void (imagesMode ? c.startImagePdf() : c.start())}>{c.starting ? 'Preparing…' : imagesMode ? 'Create PDF' : 'Convert file'}</button>
       </div>
     </section>

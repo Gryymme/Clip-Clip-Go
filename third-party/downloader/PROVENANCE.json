@@ -1,0 +1,23 @@
+{
+  "target": "x86_64-pc-windows-msvc",
+  "ytDlp": {
+    "version": "2026.10.26",
+    "url": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.10.26/yt-dlp.exe",
+    "sha256": "f5389d3698ecde4ef06f4e6b1ce0294fe9ac1396228c8990b8d3416d6d177a7d",
+    "size": 23575744
+  },
+  "deno": {
+    "version": "2.9.8",
+    "sha256": "924397800533d3eb0ed0c889b20ad70e18b970d93acd8135bc043f425e528266",
+    "url": "https://github.com/denoland/deno/releases/download/v2.9.8/deno-x86_64-pc-windows-msvc.zip",
+    "archiveSha256": "cba84b26e0df5ae7f74fc66b86a95b866872a86292ebd84fa1e959927edd93bf",
+    "size": 98081568
+  },
+  "documentation": [
+    "https://github.com/yt-dlp/yt-dlp",
+    "https://github.com/yt-dlp/yt-dlp/wiki/EJS"
+  ],
+  "upstreamChecksums": "Retained official publisher checksum lists; archive and executable hashes are pinned before extraction/use.",
+  "runtime": "Official yt-dlp embeds EJS. Deno supplied explicitly; remote components and other runtimes disabled.",
+  "redistribution": "Release source/material assembly and dependency license review remain open; see NOTICE.md."
+}

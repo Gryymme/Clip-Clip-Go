@@ -72,12 +72,14 @@ impl Runner for MockRunner {
                     stdout: b"invalid".to_vec(),
                     stderr: String::new(),
                     success: true,
+                    exit_code: Some(0),
                 });
             }
             return Ok(Captured {
                 stdout: json_output(),
                 stderr: String::new(),
                 success: true,
+                exit_code: Some(0),
             });
         }
         let temporary = Path::new(args.last().unwrap());
@@ -100,6 +102,7 @@ impl Runner for MockRunner {
             stdout: Vec::new(),
             stderr: "Test decoder error".into(),
             success: self.mode != "fail",
+            exit_code: Some(if self.mode == "fail" { 1 } else { 0 }),
         })
     }
 }
@@ -307,6 +310,7 @@ fn versions_are_checked_and_missing_encoders_are_reported() {
         stdout: text.as_bytes().to_vec(),
         stderr: String::new(),
         success: true,
+        exit_code: Some(0),
     };
     let runner = SetupRunner(Mutex::new(VecDeque::from([
         response("ffmpeg version 8.0\n"),

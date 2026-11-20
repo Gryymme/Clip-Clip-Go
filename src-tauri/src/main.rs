@@ -2,6 +2,7 @@
 
 mod bundled;
 mod conversion;
+mod downloader;
 mod engine;
 #[path = "../engine_integrity.rs"]
 mod engine_integrity;
@@ -10,11 +11,13 @@ mod media;
 mod pdf;
 mod preview;
 mod process;
+mod process_tree;
 mod text;
 
 fn main() {
     tauri::Builder::default()
         .manage(conversion::Runtime::default())
+        .manage(downloader::Runtime::default())
         .plugin(tauri_plugin_dialog::init())
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event {
@@ -28,6 +31,13 @@ fn main() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            downloader::inspect_download,
+            downloader::download_status,
+            downloader::cancel_download,
+            downloader::download_capabilities,
+            downloader::plan_download,
+            downloader::choose_download_folder,
+            downloader::start_download,
             media::select_media_file,
             conversion::configure_engines,
             conversion::probe_media,
@@ -52,6 +62,7 @@ fn main() {
                 use tauri::Manager;
                 app.state::<conversion::Runtime>().core.shutdown();
                 app.state::<conversion::Runtime>().previews.cancel_all();
+                app.state::<downloader::Runtime>().shutdown();
             }
         });
 }

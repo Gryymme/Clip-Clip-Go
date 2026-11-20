@@ -233,3 +233,29 @@ progress:indeterminate::-webkit-progress-value { background: transparent; }
 .selection-drop[data-drag-over] .file-summary { background: var(--color-hover); }
 .custom-page-size { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,10rem),1fr)); gap: var(--space-2) var(--space-4); }
 .custom-page-size > p { grid-column: 1 / -1; }
+.download-link-row { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: start; }
+.download-link-row .text-input { flex: 1 1 20rem; inline-size: 100%; }
+.download-link-row .button { flex: 0 1 auto; }
+.download-link-card .text-input { inline-size: 100%; margin-block-start: var(--space-3); }
+.download-link-card .file-summary-actions { align-self: center; }
+.download-job { padding: var(--space-5); border: 1px solid var(--color-border); border-radius: var(--radius-surface); background: var(--color-surface); }
+.download-job-actions { margin-block-start: var(--space-4); }
+.download-progress-facts { min-block-size: 1.5em; margin-block: var(--space-3); }
+.download-diagnostics { margin-block-start: var(--space-4); }
+.download-diagnostics ol { padding-inline-start: var(--space-5); }
+.download-diagnostics pre { white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-mono); }
+.downloader .workflow-section { margin-block-end: var(--space-5); }
+.download-summary { grid-template-columns: 88px minmax(0,1fr); }
+.download-fields { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,17rem),1fr)); gap: var(--space-2) var(--space-5); }
+.download-field,.download-fields > div { min-inline-size: 0; }
+.download-fields select { inline-size: 100%; max-inline-size: 100%; }
+.download-advanced { margin-block: var(--space-4); }
+.download-advanced summary { cursor: pointer; }
+.download-path,.download-plan { overflow-wrap: anywhere; white-space: pre-wrap; }
+.download-plan { margin-block-start: var(--space-4); }
+.download-streams { max-block-size: 20rem; overflow: auto; margin-block: var(--space-4); }
+.download-streams table { border-collapse: collapse; font-size: var(--text-small); inline-size: 100%; }
+.download-streams td,.download-streams th { padding: var(--space-2); text-align: start; vertical-align: top; border-block-end: 1px solid var(--color-border); }
+.download-streams caption { text-align: start; }
+.downloader .page-heading { margin-block-end: var(--space-5); }
+@media (pointer:fine) and (prefers-reduced-motion:no-preference) { .downloader .button:enabled:active:not(:focus-visible) { transform: scale(.98); } }

@@ -22,16 +22,16 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost",
-      "devCsp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost ws://127.0.0.1:1420"
+      "csp": "default-src 'self'; style-src 'self'; img-src 'self' data: https: http:; connect-src 'self' ipc: http://ipc.localhost",
+      "devCsp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: http:; connect-src 'self' ipc: http://ipc.localhost ws://127.0.0.1:1420"
     }
   },
   "bundle": {
     "active": true,
     "targets": ["msi"],
     "useLocalToolsDir": true,
-    "externalBin": ["binaries/ffmpeg", "binaries/ffprobe"],
-    "resources": { "../third-party/ffmpeg/": "notices/ffmpeg/", "../third-party/text/": "notices/text/", "resources/pdf/": "pdf/", "../third-party/pdf/": "notices/pdf/" },
+    "externalBin": ["binaries/ffmpeg", "binaries/ffprobe", "binaries/yt-dlp", "binaries/deno"],
+    "resources": { "../third-party/downloader/": "notices/downloader/", "../third-party/ffmpeg/": "notices/ffmpeg/", "../third-party/text/": "notices/text/", "resources/pdf/": "pdf/", "../third-party/pdf/": "notices/pdf/" },
     "icon": ["icons/icon.png", "icons/icon.ico"]
   }
 }

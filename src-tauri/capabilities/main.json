@@ -7,6 +7,13 @@
     "main"
   ],
   "permissions": [
+    "allow-inspect-download",
+    "allow-download-status",
+    "allow-cancel-download",
+    "allow-download-capabilities",
+    "allow-plan-download",
+    "allow-choose-download-folder",
+    "allow-start-download",
     "allow-generate-preview",
     "allow-cancel-preview",
     "allow-select-media-file",

@@ -31,6 +31,32 @@ fn main() {
         assert!(engine_integrity::verify(std::path::Path::new(&path), hash.as_str().unwrap()).unwrap_or(false), "Required FFmpeg notice {name} is missing or changed. Restore third-party/ffmpeg before building.");
     }
     println!("cargo:rerun-if-changed=../scripts/pdf-manifest.json");
+    println!("cargo:rerun-if-changed=../scripts/downloader-manifest.json");
+    println!("cargo:rerun-if-changed=../third-party/downloader");
+    let downloader: serde_json::Value =
+        serde_json::from_str(include_str!("../scripts/downloader-manifest.json")).unwrap();
+    for (name, key) in [("yt-dlp", "ytDlp"), ("deno", "deno")] {
+        let path = format!("binaries/{name}-{target}.exe");
+        println!("cargo:rerun-if-changed={path}");
+        assert!(
+            engine_integrity::verify(
+                std::path::Path::new(&path),
+                downloader[key]["sha256"].as_str().unwrap()
+            )
+            .unwrap_or(false),
+            "Bundled {name} missing or damaged. Run npm run downloader:prepare."
+        );
+    }
+    for (name, hash) in downloader["noticeFiles"].as_object().unwrap() {
+        assert!(
+            engine_integrity::verify(
+                std::path::Path::new(&format!("../third-party/downloader/{name}")),
+                hash.as_str().unwrap()
+            )
+            .unwrap_or(false),
+            "Required Downloader notice {name} changed or missing."
+        );
+    }
     println!("cargo:rerun-if-changed=../third-party/pdf");
     let pdf: serde_json::Value = serde_json::from_str(
         include_str!("../scripts/pdf-manifest.json").trim_start_matches('\u{feff}'),
@@ -63,6 +89,13 @@ fn main() {
     }
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
+            "inspect_download",
+            "download_status",
+            "cancel_download",
+            "download_capabilities",
+            "plan_download",
+            "choose_download_folder",
+            "start_download",
             "select_media_file",
             "configure_engines",
             "probe_media",

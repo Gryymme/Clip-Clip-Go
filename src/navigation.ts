@@ -1,5 +1,5 @@
 export const pages = [
-  { name: 'Downloader', icon: 'download', description: 'Authorized media downloading is not implemented yet.' },
+  { name: 'Downloader', icon: 'download', description: 'Inspect one media link and download your selected output.' },
   { name: 'Converter', icon: 'convert', description: 'Convert one local file.' },
   { name: 'Images to PDF', icon: 'images', description: 'Arrange images and create one PDF.' },
   { name: 'Queue', icon: 'queue', description: 'Queue management is not implemented yet.' },

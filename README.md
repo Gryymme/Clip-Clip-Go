@@ -1,6 +1,34 @@
 # Clip-Clip-Go
 
-Clip-Clip-Go is a Windows desktop application combining local media, image and text/PDF conversion with a user-friendly interface. Authorized media downloading is planned; Downloader, Queue and History remain placeholders.
+Clip-Clip-Go is a Windows desktop application combining single-link media downloading with local media, image and text/PDF conversion. Visible branding is **ClipClipGO**. Queue and History remain placeholders.
+
+## Downloader
+
+Paste one HTTP/HTTPS media-page or direct-media URL, choose **Inspect link**, select a source and final output, review the native execution summary, choose a destination folder and filename, then download. Inspection is cancellable and limited to 60 seconds; missing metadata stays unknown. Source quality defaults to Best available, with distinct reported resolutions/frame rates and advanced exact video/audio stream selection. Separate video/audio streams are merged; video-only and audio-only sources are identified without claiming nonexistent audio.
+
+| Settings | Implemented choices |
+| --- | --- |
+| Video container | MP4, MKV, WebM |
+| Resolution | Same as source; applicable 2160p, 1440p, 1080p, 720p, 480p, 360p; aspect ratio preserved, no upscaling |
+| Frame rate | Same as source; 24, 25, 30, 50, 60 fps. Increases duplicate frames; no interpolation |
+| Video encoding | Auto or compatible available H.264, HEVC, VP9, AV1 software encoders |
+| Video quality | Preserve compatible streams, High, Balanced, Smaller file; distinct custom target bitrate mode (100–100000 kb/s) |
+| Video audio | Keep or Remove; compatible audio codec, bitrate, sample rate and channel controls |
+| Audio output | MP3, M4A/AAC, WAV/PCM 16-bit, FLAC, OGG/Vorbis, Opus |
+| Audio bitrate | Preserve/compatible default, 64/96/128/160/192/256/320 kb/s presets and codec-validated custom target; hidden for lossless/PCM |
+| Sample rate/channels | Same as source and codec-compatible rates from 8–96 kHz; Same, Mono, Stereo channels. Opus uses 48 kHz; multichannel MP3 needs explicit Mono/Stereo |
+
+Advanced settings are expandable. A shared native compatibility contract drives both frontend and Rust validation. The plan copies/remuxes compatible streams and re-encodes only streams that require changes. Preserve mode uses a balanced preset if encoding is necessary. Unknown source codecs produce a provisional plan that is checked against FFprobe after download. Higher bitrates/quality settings and converting lossy audio to FLAC cannot restore detail; source sizes may be approximate and final size/bitrate is not promised.
+
+The link input uses the same selection card as Converter and Images to PDF. Source IDs remain fixed after planning: measured frame rates or other approximate metadata cannot silently select another stream after download. Each source re-extracts the original page to resolve current media links, with one fresh extraction retry after HTTP 403/410. Completed files come from structured yt-dlp completion records and must belong to the job workspace. Stage-specific errors offer expandable, bounded diagnostics with engine exit status and selected IDs; credentials and URLs are redacted.
+
+Downloads use bundled **yt-dlp 2026.10.26**, including its embedded EJS challenge scripts, **Deno 2.9.8**, and the existing **FFmpeg/FFprobe 9.0.2 essentials**. The two added raw executables total **121,657,312 bytes (116.02 MiB)**, plus retained notices; compressed installer growth is not measured. Developer preparation is pinned and checksum-verified. Users install nothing, configure no PATH and download no engines/components at first launch. There are no automatic engine updates.
+
+Actual native stages are Inspecting, Downloading, Merging, Converting and Finalizing. Progress identifies the current source and resets between sources. It uses measured bytes or fragment counts, labels byte estimates with “About”, and stays indeterminate when no total or estimate is available. Completion of one stream does not complete the job. Download state and cancellation survive navigation. All engine-backed work shares the existing one-operation lock, including conversion. Windows process trees are terminated on cancellation/timeouts/normal app exit. Streams, merges and conversion outputs stay in a unique job directory; FFprobe validates output before atomic publication without overwriting. Windows filenames are sanitized. Protected publication requires a destination filesystem supporting hard links; unsupported destinations fail explicitly. Crashes/power loss can leave staging directories; crash recovery is not implemented.
+
+Support depends on the pinned yt-dlp extractor and site behavior; every website is not promised. Supported HTTP/native HLS/DASH sources must be one completed, unprotected item. Pure playlists/channels, live/upcoming/processing streams, authentication/cookie importing, DRM/access-control bypass, batches, queues and history persistence are outside this milestone. A watch URL with a playlist parameter selects its item only. No artificial download quotas are imposed. Subtitles, chapters, attachments, HDR preservation/tone mapping and rich downloaded metadata are not implemented; re-encoded video uses yuv420p.
+
+See [Downloader implementation, correction evidence and manual checklist](docs/downloader.md) and [engine provenance/notices](third-party/downloader/NOTICE.md). Routine integration tests use generated media and a local HTTP fixture, independent of public sites. An explicitly authorized YouTube fixture passed watch/share inspection and a 360p two-source download through merge, FFprobe validation and publication; this does not establish universal YouTube or default-2160p compatibility. Native dialogs and app appearance remain manual. Public binary redistribution remains blocked by GPL source/material preparation and the final dependency-license review; no installer is built in this milestone.
 
 ## Implemented conversions
 
@@ -17,7 +45,7 @@ Clip-Clip-Go is a Windows desktop application combining local media, image and t
 
 Extension matching is case-insensitive. Markdown output uses `.md`, HTML uses `.html`, and JPEG uses `.jpg`. Identical-format document conversions are not offered. Microsoft Office and OpenDocument formats, including DOC/DOCX, RTF, XLS/XLSX, PPT/PPTX, ODT, ODS and ODP, are unsupported. **LibreOffice and optional Office installation are permanently cancelled.** The short historical decision is in [docs/office-runtime.md](docs/office-runtime.md).
 
-Select files with native dialogs or drop supported local files onto the selection card. Converter accepts exactly one file; multiple files produce “Choose one file”. Images to PDF appends supported images in delivered order, keeps existing duplicate handling, and reports rejected or excess files. Directories and URLs are rejected. File changes are blocked during a conversion; Choose buttons remain the keyboard alternative. Metadata is obtained natively without loading files into the frontend. Content is checked by the applicable provider. Selection, output choices, image order, page settings and the current job survive navigation during the session. There is one active conversion across all providers. Only the theme preference is saved locally; there is no saved conversion configuration, queue, history or database.
+Select files with native dialogs or drop supported local files onto the selection card. Converter accepts exactly one file; multiple files produce “Choose one file”. Images to PDF appends supported images in delivered order, keeps existing duplicate handling, and reports rejected or excess files. Directories and URLs are rejected. File changes are blocked during a conversion; Choose buttons remain the keyboard alternative. Metadata is obtained natively without loading files into the frontend. Content is checked by the applicable provider. Selection, output choices, image order, page settings and the current job survive navigation during the session. There is one active download or conversion across all providers. Only the theme preference is saved locally; there is no saved conversion configuration, queue, history or database.
 
 ## Navigation and file previews
 
@@ -96,7 +124,7 @@ Frontend preview only (no native dialogs/conversion):
 npm run dev
 ```
 
-Desktop development/build hooks run `engines:prepare` and `pdf:prepare` before the frontend. Pinned URLs, SHA-256 hashes, versions and build flags are in `scripts/ffmpeg-manifest.json` and `scripts/pdf-manifest.json`. Verified project-local caches are reused; downloads/extraction happen only during developer setup/build. No global installation or PATH changes occur. `npm run pdf:prepare` can be run separately; `npm run pdf:verify-resources` checks the compiled debug payload. Generated assets/caches are ignored by Git. Preserve tracked manifests, preparation scripts and notices.
+Desktop development/build hooks run `engines:prepare`, `downloader:prepare` and `pdf:prepare` before the frontend. Pinned URLs, SHA-256 hashes, versions and build flags are in `scripts/ffmpeg-manifest.json`, `scripts/downloader-manifest.json` and `scripts/pdf-manifest.json`. Verified project-local caches are reused; downloads/extraction happen only during developer setup/build. No global installation or PATH changes occur. `npm run pdf:prepare` can be run separately; `npm run pdf:verify-resources` checks the compiled debug payload. Generated assets/caches are ignored by Git. Preserve tracked manifests, preparation scripts and notices.
 
 Build a Windows debug application without an installer:
 
@@ -104,9 +132,9 @@ Build a Windows debug application without an installer:
 npm run tauri -- build --debug --no-bundle
 ```
 
-The executable is `src-tauri/target/debug/clip-clip-go.exe`. Retain its accompanying `ffmpeg.exe`, `ffprobe.exe`, `pdf/` and `notices/` trees. Copying the executable alone is insufficient; no portable ZIP is provided. This milestone does not build/install an MSI or implement installer component selection.
+The executable is `src-tauri/target/debug/clip-clip-go.exe`. Retain its accompanying `ffmpeg.exe`, `ffprobe.exe`, `yt-dlp.exe`, `deno.exe`, `pdf/` and `notices/` trees. Copying the executable alone is insufficient; no portable ZIP is provided. This milestone does not build/install an MSI or implement installer component selection.
 
-Notices are in `third-party/ffmpeg`, `third-party/text` and `third-party/pdf` and are packaged under `notices/`. PDFium binary dependencies, Noto Sans OFL, and native wrapper licenses are retained. The application license is unchanged. **FFmpeg public redistribution/source obligations remain open** as documented in [its notice](third-party/ffmpeg/NOTICE.md); attribution alone is insufficient.
+Notices are in `third-party/ffmpeg`, `third-party/downloader`, `third-party/text` and `third-party/pdf` and are packaged under `notices/`. PDFium binary dependencies, Noto Sans OFL, and native wrapper licenses are retained. The application license is unchanged. **FFmpeg public redistribution/source obligations remain open** as documented in [its notice](third-party/ffmpeg/NOTICE.md); attribution alone is insufficient.
 
 See [docs/text-pdf.md](docs/text-pdf.md) for measured cleanup, dependency/resource sizes and verification results.
 

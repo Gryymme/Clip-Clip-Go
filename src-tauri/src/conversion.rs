@@ -65,9 +65,9 @@ pub struct Runtime {
     pub previews: crate::preview::Previews,
     pub drops: Mutex<Vec<PathBuf>>,
 }
-struct Operation {
+pub(crate) struct Operation {
     core: Arc<Core>,
-    control: Arc<Control>,
+    pub(crate) control: Arc<Control>,
 }
 impl Drop for Operation {
     fn drop(&mut self) {
@@ -82,7 +82,7 @@ impl Drop for Operation {
     }
 }
 impl Core {
-    fn reserve(self: &Arc<Self>) -> Result<Operation> {
+    pub(crate) fn reserve(self: &Arc<Self>) -> Result<Operation> {
         let mut inner = self.inner.lock().unwrap();
         if inner.active.is_some() {
             return Err("Another engine operation is in progress. Wait for it to finish.".into());
@@ -95,12 +95,7 @@ impl Core {
         })
     }
     pub fn busy(&self) -> bool {
-        self.inner
-            .lock()
-            .unwrap()
-            .job
-            .as_ref()
-            .is_some_and(|j| j.phase.busy())
+        self.inner.lock().unwrap().active.is_some()
     }
     pub fn remember(&self, path: &Path) {
         if let Ok(path) = path.canonicalize() {

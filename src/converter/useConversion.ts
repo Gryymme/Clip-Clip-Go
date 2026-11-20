@@ -10,7 +10,7 @@ import { claimDrop, cancelConversion, configureEngines, conversionStatus, probeM
 import { isEngineFormat, isImageFormat, isTextFormat, isImageFile, isMediaFile, jobIsBusy, mergeJob, nativeError } from './conversion';
 import type { ConversionJob, EngineReport, MediaInfo, ImageInfo, PdfInfo } from './conversion';
 
-export function useConversion(selection: SelectionState, dispatch: Dispatch<SelectionAction>, imagesPage = false) {
+export function useConversion(selection: SelectionState, dispatch: Dispatch<SelectionAction>, imagesPage = false, externalBusy = false) {
   const [engine, setEngine] = useState<EngineReport | null>(null);
   const [engineLoading, setEngineLoading] = useState(true);
   const [probe, setProbe] = useState<{ path: string; media: MediaInfo } | null>(null);
@@ -30,7 +30,8 @@ export function useConversion(selection: SelectionState, dispatch: Dispatch<Sele
   const [cancelling, setCancelling] = useState(false);
   const initialRequest = useRef<Promise<[EngineReport | null, ConversionJob | null]> | null>(null);
   const operation = useRef(false);
-  const busy = starting || jobIsBusy(job);
+  const ownBusy = starting || jobIsBusy(job);
+  const busy = ownBusy || externalBusy;
 
   useEffect(() => {
     let live = true;
@@ -45,7 +46,7 @@ export function useConversion(selection: SelectionState, dispatch: Dispatch<Sele
   useEffect(() => { dispatch({ type: 'lock', locked: busy }); }, [busy, dispatch]);
 
   useEffect(() => {
-    if (!busy) return;
+    if (!ownBusy) return;
     let live = true;
     let timer: ReturnType<typeof setTimeout>;
     async function refresh() {
@@ -55,7 +56,7 @@ export function useConversion(selection: SelectionState, dispatch: Dispatch<Sele
     }
     void refresh();
     return () => { live = false; clearTimeout(timer); };
-  }, [busy]);
+  }, [ownBusy]);
 
   const path = selection.file?.path;
   const mediaInput = isMediaFile(selection.file);
