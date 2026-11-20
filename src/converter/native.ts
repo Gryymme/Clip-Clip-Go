@@ -2,13 +2,16 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 import { inputExtensions } from './formats';
 import type { NativeFile } from './selection';
 import type { EngineReport, MediaInfo, ImageInfo, PdfInfo, ConversionFormat, ConversionJob } from './conversion';
+import type { Thumbnail } from './preview';
+export async function generatePreview(inputPath: string, requestId: number): Promise<Thumbnail> { desktop(); return invoke('generate_preview', { inputPath, requestId }); }
+export async function cancelPreview(requestId: number): Promise<void> { desktop(); return invoke('cancel_preview', { requestId }); }
 
 export async function selectMediaFile(): Promise<NativeFile | null> {
   if (!isTauri()) throw { code: 'desktopRequired' };
   return invoke<NativeFile | null>('select_media_file', { extensions: inputExtensions });
 }
 
-function desktop() { if (!isTauri()) throw 'Engine checks and conversion are available in the Clip-Clip-Go desktop app.'; }
+function desktop() { if (!isTauri()) throw 'Engine checks and conversion are available in the ClipClipGO desktop app.'; }
 export async function configureEngines(source: 'current' | 'bundled'): Promise<EngineReport> {
   desktop(); return invoke('configure_engines', { source });
 }

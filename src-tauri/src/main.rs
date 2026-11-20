@@ -8,6 +8,7 @@ mod engine_integrity;
 mod images;
 mod media;
 mod pdf;
+mod preview;
 mod process;
 mod text;
 
@@ -25,7 +26,9 @@ fn main() {
             conversion::start_images_pdf,
             conversion::start_conversion,
             conversion::get_conversion_status,
-            conversion::cancel_conversion
+            conversion::cancel_conversion,
+            preview::generate_preview,
+            preview::cancel_preview
         ])
         .build(tauri::generate_context!())
         .expect("error while building Clip-Clip-Go")
@@ -36,6 +39,7 @@ fn main() {
             ) {
                 use tauri::Manager;
                 app.state::<conversion::Runtime>().core.shutdown();
+                app.state::<conversion::Runtime>().previews.cancel_all();
             }
         });
 }

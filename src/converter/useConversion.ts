@@ -1,5 +1,7 @@
 import { isDocumentRoute } from './formats';
 import { addImages, moveImage, pageRangeError } from './pdf';
+import { useImagePreviews } from './useImagePreviews';
+import { useFilePreview } from './useFilePreview';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Dispatch } from 'react';
 import type { NativeFile, SelectionAction, SelectionState } from './selection';
@@ -7,13 +9,12 @@ import { cancelConversion, configureEngines, conversionStatus, probeMedia, probe
 import { isEngineFormat, isImageFormat, isTextFormat, isImageFile, isMediaFile, jobIsBusy, mergeJob, nativeError } from './conversion';
 import type { ConversionJob, EngineReport, MediaInfo, ImageInfo, PdfInfo } from './conversion';
 
-export function useConversion(selection: SelectionState, dispatch: Dispatch<SelectionAction>) {
+export function useConversion(selection: SelectionState, dispatch: Dispatch<SelectionAction>, imagesPage = false) {
   const [engine, setEngine] = useState<EngineReport | null>(null);
   const [engineLoading, setEngineLoading] = useState(true);
   const [probe, setProbe] = useState<{ path: string; media: MediaInfo } | null>(null);
   const [pdfProbe, setPdfProbe] = useState<{path: string; info: PdfInfo} | null>(null);
   const [pdfPages, setPdfPages] = useState('');
-  const [mode, setMode] = useState<'single' | 'imagesPdf'>('single');
   const [images, setImages] = useState<NativeFile[]>([]);
   const [pageSize, setPageSize] = useState<'a4' | 'image'>('a4');
   const [adding, setAdding] = useState(false);
@@ -83,6 +84,8 @@ export function useConversion(selection: SelectionState, dispatch: Dispatch<Sele
   const media = probe && probe.path === path ? probe.media : null;
   const image = imageProbe && imageProbe.path === path ? imageProbe.info : null;
   const pdf = pdfProbe && pdfProbe.path === path ? pdfProbe.info : null;
+  const preview = useFilePreview(selection.file, Boolean(imageInput ? image : mediaInput ? media : false), busy || imagesPage, Boolean(probeError) || Boolean(selection.file?.category === 'video' && !engineLoading && !engine?.ready));
+  const imagePreviews = useImagePreviews(images, busy || !imagesPage || engineLoading || probing);
   const rangeError = pdf && (selection.output === 'png' || selection.output === 'jpg') ? pageRangeError(pdfPages, pdf.pages) : null;
   const formats = media?.formats ?? engine?.formats ?? [];
   const availability = formats.find(item => item.format === selection.output);
@@ -117,7 +120,7 @@ export function useConversion(selection: SelectionState, dispatch: Dispatch<Sele
     catch (cause) { setError(nativeError(cause)); }
     finally { setCancelling(false); }
   }
-  return { engine, engineLoading, media, image, pdf, pdfPages, setPdfPages, rangeError, mode, setMode, images, pageSize, setPageSize, adding, chooseImages, startImagePdf,
+  return { imagePreviews: imagePreviews.states, failImagePreview: imagePreviews.fail, engine, engineLoading, media, image, pdf, preview, pdfPages, setPdfPages, rangeError, outputIsFolder: pdfInput && (selection.output === 'png' || selection.output === 'jpg'), images, pageSize, setPageSize, adding, chooseImages, startImagePdf,
     removeImage: (index: number) => { if (!busy && !adding) setImages(previous => previous.filter((_,i) => i !== index)); },
     moveImage: (index: number, direction: -1 | 1) => { if (!busy && !adding) setImages(previous => moveImage(previous,index,direction)); },
     probing, probeError, error, job, busy, starting, cancelling, formats, availability, canConvert, configure, start, cancel };

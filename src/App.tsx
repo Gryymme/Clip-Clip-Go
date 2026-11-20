@@ -1,54 +1,25 @@
 import { useReducer, useRef, useState } from 'react';
+import Settings from './components/Settings';
 import Converter from './converter/Converter';
+import ImagesToPdf from './converter/ImagesToPdf';
+import AppShell from './components/AppShell';
+import { pages, isConversionPage, type PageName } from './navigation';
+import { JobStatus } from './converter/ConversionControls';
+import { jobIsBusy } from './converter/conversion';
 import { initialSelection, selectionReducer } from './converter/selection';
 import { useConversion } from './converter/useConversion';
 
-const pages = [
-  { name: 'Downloader', description: 'A future home for authorized media downloads.' },
-  { name: 'Converter', description: 'A future home for local video, audio, image, and document conversion.' },
-  { name: 'Queue', description: 'A future home for managing pending work.' },
-  { name: 'History', description: 'A future home for reviewing past activity.' },
-  { name: 'Settings', description: 'A future home for application preferences.' },
-] as const;
-
 export default function App() {
-  const [activePage, setActivePage] = useState<(typeof pages)[number]>(pages[0]);
+  const [activePage, setActivePage] = useState<PageName>('Converter');
   const [selection, dispatchSelection] = useReducer(selectionReducer, initialSelection);
   const selectionBusy = useRef(false);
-  const conversion = useConversion(selection, dispatchSelection);
-
-  return (
-    <div className="app-shell">
-      <a className="skip-link" href="#main-content">Skip to content</a>
-      <aside className="sidebar">
-        <p className="brand-name">Clip-Clip-Go</p>
-        <nav aria-label="Main navigation">
-          <ul className="navigation-list">
-            {pages.map((page) => (
-              <li key={page.name}>
-                <button
-                  className="navigation-button"
-                  type="button"
-                  aria-current={activePage.name === page.name ? 'page' : undefined}
-                  onClick={() => setActivePage(page)}
-                >
-                  {page.name}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </nav>
-      </aside>
-      <main id="main-content" tabIndex={-1}>
-        <header className="page-header">
-          <h1>{activePage.name}</h1>
-        </header>
-        {activePage.name === 'Converter' ? <Converter state={selection} dispatch={dispatchSelection} busy={selectionBusy} conversion={conversion} /> : <section className="placeholder" aria-labelledby="placeholder-title" aria-live="polite" aria-atomic="true">
-          <h2 id="placeholder-title">Not implemented yet</h2>
-          <p>{activePage.description}</p>
-          <p className="placeholder-note">No actions are available on this page yet.</p>
-        </section>}
-      </main>
-    </div>
-  );
+  // Lives above page destinations: switching pages never resets either workflow.
+  const conversion = useConversion(selection, dispatchSelection, activePage === 'Images to PDF');
+  const page = pages.find(page => page.name === activePage)!;
+  return <AppShell activePage={activePage} onNavigate={setActivePage}>
+    {activePage === 'Converter' ? <Converter state={selection} dispatch={dispatchSelection} busy={selectionBusy} conversion={conversion} />
+      : activePage === 'Images to PDF' ? <ImagesToPdf conversion={conversion} selecting={selection.selecting} />
+      : activePage === 'Settings' ? <Settings /> : <section className="placeholder" aria-labelledby="placeholder-title"><h2 id="placeholder-title">Not implemented yet</h2><p>{page.description}</p></section>}
+    {!isConversionPage(activePage) && jobIsBusy(conversion.job) && <JobStatus controller={conversion} />}
+  </AppShell>;
 }

@@ -66,7 +66,7 @@ export function selectionReducer(state: SelectionState, action: SelectionAction)
 export function selectionError(error: unknown): string {
   const code = typeof error === 'object' && error !== null && 'code' in error ? error.code : '';
   switch (code) {
-    case 'desktopRequired': return 'File selection is available in the Clip-Clip-Go desktop app. Open the desktop app and try again.';
+    case 'desktopRequired': return 'File selection is available in the ClipClipGO desktop app. Open the desktop app and try again.';
     case 'missingFile': return 'The selected file could not be found. It may have been moved or deleted. Choose the file again.';
     case 'notAFile': return 'The selection is not a regular file. Choose a supported video, audio, image, or document file.';
     case 'busy': return 'A conversion is active. Finish or cancel it before choosing another file.';

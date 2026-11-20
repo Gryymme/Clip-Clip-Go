@@ -1,0 +1,17 @@
+{
+  "upstream": "https://github.com/JulietaUla/Montserrat",
+  "commit": "555facfb2a18c72c3c0380f0d9c0f060453a9058",
+  "source": "https://raw.githubusercontent.com/JulietaUla/Montserrat/555facfb2a18c72c3c0380f0d9c0f060453a9058/fonts/variable/Montserrat%5Bwght%5D.ttf",
+  "license": "OFL.txt",
+  "sha256": "1e2c44ef8c956ed66998649d8c832d221e22c04eaab63c044f18eb05d1c63b7c",
+  "bytes": 744936,
+  "axes": [
+    {
+      "tag": "wght",
+      "min": 100.0,
+      "default": 100.0,
+      "max": 900.0
+    }
+  ],
+  "note": "Unmodified official variable TTF; upstream has no variable WOFF2. UI only; generated PDF fonts unchanged."
+}

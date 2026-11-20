@@ -67,6 +67,8 @@ fn main() {
             "configure_engines",
             "probe_media",
             "probe_image",
+            "generate_preview",
+            "cancel_preview",
             "probe_pdf",
             "select_images",
             "start_images_pdf",

@@ -1,58 +1,40 @@
-import { isTextInput } from './formats';
 import type { ConversionController } from './useConversion';
-import { displayDuration, isMediaFile, isImageFile, isImageFormat, isTextFormat, jobIsBusy } from './conversion';
+import { displayDuration, isImageFormat, isTextFormat, jobIsBusy } from './conversion';
 import type { SelectedFile } from './selection';
 
 export function EngineSetup({ controller: c, selecting }: { controller: ConversionController; selecting: boolean }) {
   const disabled = selecting || c.busy || c.engineLoading || c.probing;
-  if (c.engineLoading) return <p className="field-help" role="status">Checking bundled conversion engines…</p>;
-  if (!c.engine?.ready) return <section className="converter-section" aria-labelledby="engine-heading">
-    <h2 id="engine-heading">Audio/video engines unavailable</h2>
-    <p className="selection-error" role="alert">{c.engine?.message ?? 'Repair or reinstall Clip-Clip-Go to restore its bundled engines.'}</p>
-    <button className="button" type="button" disabled={disabled} onClick={() => void c.configure('bundled')}>Check bundled engines again</button>
-  </section>;
-  return <details className="supported-inputs field-help">
-    <summary>Audio/video engine versions</summary>
-    <p className="engine-version">{c.engine.ffmpegVersion}</p>
-    <p className="engine-version">{c.engine.ffprobeVersion}</p>
-  </details>;
+  if (c.engineLoading) return <p className="field-help" role="status">Checking audio/video engines…</p>;
+  if (!c.engine?.ready) return <div className="selection-error" role="alert"><p>{c.engine?.message ?? 'Repair ClipClipGO to restore its audio/video engines.'}</p><button className="button" type="button" disabled={disabled} onClick={() => void c.configure('bundled')}>Check engines again</button></div>;
+  return <details className="supported-inputs field-help engine-details"><summary>Audio/video engine details</summary><p className="engine-version">{c.engine.ffmpegVersion}</p><p className="engine-version">{c.engine.ffprobeVersion}</p></details>;
 }
-
-export function ConversionActions({ controller: c, file }: { controller: ConversionController; file: SelectedFile | null }) {
-  const mediaInput = isMediaFile(file);
-  const imageInput = isImageFile(file);
-  const textInput = file !== null && isTextInput(file.format);
-  const imagesMode = c.mode === 'imagesPdf';
-  const imageJob = c.job !== null && (isImageFormat(c.job.format) || isTextFormat(c.job.format) || c.job.format === 'pdf' || Boolean(c.job.pagesTotal));
-  const reason = imagesMode ? 'Save one PDF in the visible page order. Originals and existing destinations are preserved.' : !file ? 'Select an audio, video, image or supported document file to convert.' : textInput || file.format === 'pdf' ? 'Choose a supported output and a new destination. Existing files and folders are preserved.' : !mediaInput && !imageInput ? 'Choose a supported input file.'
-    : imageInput ? c.probing ? 'Decoding and checking the image…' : c.probeError ? 'Select another image to continue.' : !c.image ? 'Waiting for image validation…' : 'Choose a new destination filename. The original and existing files will be preserved.'
-    : c.engineLoading ? 'Checking the conversion engines…' : !c.engine?.ready ? 'Restore the bundled engines to enable audio/video conversion.'
-    : c.probing ? 'Inspecting media with FFprobe…' : c.probeError ? 'Select another file to continue.' : c.availability?.reason ? 'Choose an available output format.' : 'Choose a destination filename. The original and existing files will be preserved.';
+export function JobStatus({ controller: c }: { controller: ConversionController }) {
+  if (!c.job) return null;
+  const job = c.job, active = jobIsBusy(job);
+  const pageOrStillJob = isImageFormat(job.format) || isTextFormat(job.format) || job.format === 'pdf' || Boolean(job.pagesTotal);
+  return <section className="conversion-job workflow-section" aria-labelledby="job-heading">
+    <h2 id="job-heading">{active ? 'Conversion status' : 'Last conversion'}</h2>
+    <p className="job-message" data-phase={job.phase} role={job.phase === 'failed' ? 'alert' : 'status'}>{job.message}</p>
+    {(active || job.phase === 'succeeded') && <>
+      <progress aria-label="Conversion progress" max={100} value={job.phase === 'succeeded' ? 100 : job.phase === 'running' ? job.percent ?? undefined : undefined} />
+      {job.pagesTotal != null ? <p className="field-help numeric-value">{job.pagesDone ?? 0} of {job.pagesTotal} pages processed</p> : !pageOrStillJob && job.phase === 'running' && <p className="field-help numeric-value">{job.percent === null ? 'Duration unavailable · ' : `${Math.floor(job.percent)}% · `}{displayDuration(job.seconds)} processed</p>}
+    </>}
+    <details className="file-location job-paths"><summary>{job.phase === 'succeeded' ? 'Saved output details' : 'Job file details'}</summary><dl><div><dt>Input</dt><dd dir="auto">{job.inputPath}</dd></div>{job.destination && <div><dt>Destination</dt><dd dir="auto">{job.destination}</dd></div>}</dl></details>
+    {active && <button className="button button-secondary" type="button" disabled={c.cancelling || job.phase === 'cancelling'} onClick={() => void c.cancel()}>{c.cancelling || job.phase === 'cancelling' ? 'Cancelling…' : 'Cancel conversion'}</button>}
+  </section>;
+}
+export function ConversionActions({ controller: c, file, imagesMode = false }: { controller: ConversionController; file: SelectedFile | null; imagesMode?: boolean }) {
+  const folder = !imagesMode && file?.format === 'pdf' && c.outputIsFolder;
+  const disabled = imagesMode ? !c.images.length || c.busy || c.adding || c.engineLoading || c.probing : !c.canConvert;
   return <>
-    {!imagesMode && mediaInput && c.media && <p className="field-help media-summary">
-      Media checked with FFprobe. {c.media.video ? `Video: ${c.media.video.codec}. ` : 'No actual video stream. '}
-      {c.media.audio ? `Audio: ${c.media.audio.codec}. ` : 'No audio stream. '}
-      Duration: {displayDuration(c.media.duration)}.
-    </p>}
-    {c.error && <p className="selection-error" role="alert">{c.error}</p>}
     {!imagesMode && c.probeError && <p className="selection-error" role="alert">{c.probeError}</p>}
-    <div className="conversion-action">
-      <button className="button button-primary" type="button" disabled={imagesMode ? !c.images.length || c.busy || c.adding || c.engineLoading || c.probing : !c.canConvert} aria-describedby={imagesMode ? 'conversion-limitation' : 'conversion-limitation output-availability'} onClick={() => void (imagesMode ? c.startImagePdf() : c.start())}>{c.starting ? 'Preparing…' : imagesMode ? 'Create PDF' : 'Convert'}</button>
-      <p className="field-help" id="conversion-limitation">{c.busy ? 'One conversion at a time. File and format controls are locked until this job finishes.' : reason}</p>
-    </div>
-    {c.job && <section className="conversion-job" aria-labelledby="job-heading">
-      <h2 id="job-heading">{jobIsBusy(c.job) ? 'Conversion progress' : 'Last conversion'}</h2>
-      <p className="job-message" data-phase={c.job.phase} role={c.job.phase === 'failed' ? 'alert' : 'status'}>{c.job.message}</p>
-      {(jobIsBusy(c.job) || c.job.phase === 'succeeded') && <>
-        <progress aria-label="Conversion progress" max={100} value={c.job.phase === 'succeeded' ? 100 : c.job.phase === 'running' ? c.job.percent ?? undefined : undefined} />
-        {!imageJob && <p className="field-help numeric-value">{c.job.phase === 'running' ? `${c.job.percent === null ? 'Duration unavailable · ' : `${Math.floor(c.job.percent)}% · `}${displayDuration(c.job.seconds)} processed` : c.job.phase === 'succeeded' ? '100% · Output validated' : 'Waiting for the current native operation…'}</p>}
-        {c.job.pagesTotal != null && <p className="field-help numeric-value">{c.job.pagesDone ?? 0} of {c.job.pagesTotal} pages processed{c.job.phase === 'succeeded' ? ' · Output validated' : ''}</p>}
-      </>}
-      <dl className="file-details">
-        <div><dt>Input</dt><dd className="file-path" dir="auto">{c.job.inputPath}</dd></div>
-        {c.job.destination && <div><dt>{c.job.phase === 'succeeded' ? 'Saved output' : 'Destination'}</dt><dd className="file-path" dir="auto">{c.job.destination}</dd></div>}
-      </dl>
-      {jobIsBusy(c.job) && <button className="button" type="button" disabled={c.cancelling || c.job.phase === 'cancelling'} onClick={() => void c.cancel()}>{c.cancelling || c.job.phase === 'cancelling' ? 'Cancelling…' : 'Cancel conversion'}</button>}
-    </section>}
+    {c.error && <p className="selection-error" role="alert">{c.error}</p>}
+    <section className="destination-section workflow-section" aria-labelledby="destination-heading">
+      <h2 id="destination-heading">Destination</h2>
+      <div className="destination-row"><p className="field-help" id="destination-help">{c.busy ? 'A conversion is active. Finish or cancel it before starting another.' : folder ? 'Name a new output folder in the Save dialog. Existing folders are protected.' : 'Choose a new filename in the Save dialog. Originals and existing files are protected.'}</p>
+        <button className="button button-primary" type="button" disabled={disabled} aria-describedby="destination-help" onClick={() => void (imagesMode ? c.startImagePdf() : c.start())}>{c.starting ? 'Preparing…' : imagesMode ? 'Create PDF' : 'Convert file'}</button>
+      </div>
+    </section>
+    <JobStatus controller={c} />
   </>;
 }

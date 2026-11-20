@@ -62,6 +62,7 @@ pub struct Core {
 #[derive(Default)]
 pub struct Runtime {
     pub core: Arc<Core>,
+    pub previews: crate::preview::Previews,
 }
 struct Operation {
     core: Arc<Core>,
@@ -105,7 +106,7 @@ impl Core {
             self.inner.lock().unwrap().selected.insert(path);
         }
     }
-    fn authorize(&self, path: &str) -> Result<PathBuf> {
+    pub(crate) fn authorize(&self, path: &str) -> Result<PathBuf> {
         let path = Path::new(path).canonicalize().map_err(|_| {
             "The input file is missing or inaccessible. Select it again.".to_string()
         })?;
@@ -116,7 +117,7 @@ impl Core {
         }
         Ok(path)
     }
-    fn engines(&self) -> Result<Engines> {
+    pub(crate) fn engines(&self) -> Result<Engines> {
         self.inner.lock().unwrap().engines.clone().ok_or_else(|| {
             "Bundled conversion engines are unavailable. Repair or reinstall Clip-Clip-Go.".into()
         })
@@ -556,6 +557,7 @@ pub fn start_conversion(
     pdf_options: Option<crate::pdf::PdfOptions>,
 ) -> Result<Job> {
     let core = state.core.clone();
+    state.previews.cancel_all();
     let input = core.authorize(&input_path)?;
     let image_input = crate::images::is_image_input(&input);
     let pdf_input = crate::pdf::is_input(&input);
@@ -840,6 +842,7 @@ pub fn start_images_pdf(
     input_paths: Vec<String>,
     page_size: crate::pdf::ImagePageSize,
 ) -> Result<Job> {
+    state.previews.cancel_all();
     if input_paths.is_empty() || input_paths.len() > 100 {
         return Err("Choose 1–100 still images.".into());
     }
