@@ -1,6 +1,9 @@
 //! One inspected item and one job, using the converter's operation lease.
 #[cfg(test)]
 mod authorized_test;
+#[cfg(test)]
+mod error_tests;
+mod errors;
 mod metadata;
 mod plan;
 mod protocol;
@@ -251,6 +254,22 @@ fn base_args(t: &Tools, e: &Engines, stage: &Path) -> Vec<String> {
         format!("temp:{}", stage.display()),
     ]
 }
+fn inspection_args(t: &Tools, e: &Engines, stage: &Path, url: &str) -> Vec<String> {
+    let mut args = base_args(t, e, stage);
+    args.extend(
+        [
+            "--dump-single-json",
+            "--skip-download",
+            "--flat-playlist",
+            "--no-warnings",
+            "--no-progress",
+            "--",
+            url,
+        ]
+        .map(String::from),
+    );
+    args
+}
 fn workspace(parent: &Path, control: &Control) -> Result<tempfile::TempDir> {
     let stage = tempfile::Builder::new()
         .prefix(".clipclipgo-download-")
@@ -287,20 +306,7 @@ pub fn inspect_download(
             // System temp is allowed at runtime; development tests explicitly use project scratch.
             let temp = std::env::temp_dir();
             let stage = workspace(&temp, &operation.control)?;
-            let mut args = base_args(&t, &engines, stage.path());
-            args.extend(
-                [
-                    "--dump-single-json",
-                    "--skip-download",
-                    "--flat-playlist",
-                    "--no-warnings",
-                    "--no-progress",
-                    "--",
-                    "",
-                ]
-                .map(String::from),
-            );
-            *args.last_mut().unwrap() = url.clone();
+            let args = inspection_args(&t, &engines, stage.path(), &url);
             let report_runtime = runtime.clone();
             let notify: Notify = Arc::new(move |stage, _, point| {
                 if let Some(point) = point {

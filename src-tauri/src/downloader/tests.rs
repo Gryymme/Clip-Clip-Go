@@ -992,6 +992,33 @@ fn watch_and_share_urls_preserve_all_query_and_fragment_information() {
 }
 
 #[test]
+fn website_inspection_keeps_complete_urls_as_one_argument_without_extractor_restrictions() {
+    let e = engines();
+    let t = Tools {
+        yt: "yt-dlp.exe".into(),
+        deno: "deno.exe".into(),
+    };
+    for input in [
+        "https://fullxcinema.com/cheaters-retreat-2-2011/",
+        "https://www.imdb.com/video/vi3232221721/?playlistId=nm13946181",
+        "https://cinejoy.pk/watch/tv/5920/1/1",
+        "https://www.youtube.com/watch?v=irVNGjRFZGk&t=1s",
+        "https://youtu.be/irVNGjRFZGk?si=share-value&t=1s#chapter",
+        "https://example.test/player?token=a%2Fb%2Bz&file=x%3Dy&filter=public#part",
+    ] {
+        let validated = metadata::url(input).unwrap();
+        assert_eq!(validated, input);
+        let args = inspection_args(&t, &e, Path::new("owned scratch"), &validated);
+        assert_eq!(&args[args.len() - 2..], &["--", input]);
+        assert!(args.iter().any(|arg| arg == "--skip-download"));
+        assert!(args.iter().any(|arg| arg == "--dump-single-json"));
+        for restricted in ["--force-generic-extractor", "--use-extractors", "--ies"] {
+            assert!(!args.iter().any(|arg| arg == restricted));
+        }
+    }
+}
+
+#[test]
 fn throttled_two_sources_keep_selected_ids_and_emit_live_progress_before_merge() {
     let d = dir();
     let e = engines();

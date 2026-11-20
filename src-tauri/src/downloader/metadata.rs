@@ -182,13 +182,5 @@ pub fn parse(bytes: &[u8], original: &str) -> Result<Media> {
     })
 }
 pub fn site_error(text: &str) -> String {
-    let lower = text.to_lowercase();
-    if lower.contains("requested format is not available"){ "The selected source format is unavailable after refreshing the link. Inspect the link again and choose an available source." }
-    else if lower.contains("filter"){ "This source is live, upcoming, processing, or DRM-protected and cannot be downloaded." }
-    else if lower.contains("429")||lower.contains("rate limit"){"The site is rate limiting requests. Wait before trying again."}
-    else if lower.contains("sign in")||lower.contains("login")||lower.contains("403")||lower.contains("private")||lower.contains("members-only"){"This media requires authentication or the site denied access. Login and cookie importing are not supported."}
-    else if lower.contains("unsupported url"){"This URL is not supported by the bundled yt-dlp version."}
-    else if lower.contains("drm"){"DRM-protected media is not supported."}
-    else if lower.contains("unavailable")||lower.contains("404")||lower.contains("removed"){"This media is unavailable, removed, or restricted by its site."}
-    else {"The site could not provide this media. Check the URL and network, or try again later. The bundled site extractor may need a future app release."}.into()
+    super::errors::message(text)
 }
