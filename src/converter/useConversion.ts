@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Dispatch } from 'react';
 import type { SelectionAction, SelectionState } from './selection';
-import { cancelConversion, configureEngines, conversionStatus, probeMedia, startConversion } from './native';
-import { isEngineFormat, isMediaFile, jobIsBusy, mergeJob, nativeError } from './conversion';
-import type { ConversionJob, EngineReport, MediaInfo } from './conversion';
+import { cancelConversion, configureEngines, conversionStatus, probeMedia, probeImage, startConversion } from './native';
+import { isEngineFormat, isImageFormat, isImageFile, isMediaFile, jobIsBusy, mergeJob, nativeError } from './conversion';
+import type { ConversionJob, EngineReport, MediaInfo, ImageInfo } from './conversion';
 
 export function useConversion(selection: SelectionState, dispatch: Dispatch<SelectionAction>) {
   const [engine, setEngine] = useState<EngineReport | null>(null);
   const [engineLoading, setEngineLoading] = useState(true);
   const [probe, setProbe] = useState<{ path: string; media: MediaInfo } | null>(null);
+  const [imageProbe, setImageProbe] = useState<{ path: string; info: ImageInfo } | null>(null);
   const [probing, setProbing] = useState(false);
   const [probeError, setProbeError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -46,16 +47,21 @@ export function useConversion(selection: SelectionState, dispatch: Dispatch<Sele
 
   const path = selection.file?.path;
   const mediaInput = isMediaFile(selection.file);
+  const imageInput = isImageFile(selection.file);
   useEffect(() => {
     let live = true;
-    setProbe(null); setProbeError(null);
-    if (!path || !mediaInput || !engine?.ready || engineLoading || busy) { setProbing(false); return; }
+    if (busy) { setProbing(false); return; }
+    setProbe(null); setImageProbe(null); setProbeError(null);
+    if (!path || (!mediaInput && !imageInput) || (mediaInput && !engine?.ready) || engineLoading) { setProbing(false); return; }
     setProbing(true);
-    probeMedia(path).then(media => { if (live) setProbe({ path, media }); })
+    const request = imageInput
+      ? probeImage(path).then(info => { if (live) setImageProbe({ path, info }); })
+      : probeMedia(path).then(media => { if (live) setProbe({ path, media }); });
+    request
       .catch(cause => { if (live) setProbeError(nativeError(cause)); })
       .finally(() => { if (live) setProbing(false); });
     return () => { live = false; };
-  }, [path, mediaInput, engine, engineLoading, busy]);
+  }, [path, selection.file, mediaInput, imageInput, engine, engineLoading, busy]);
 
   const configure = useCallback(async (source: 'bundled') => {
     if (operation.current || busy || selection.selecting || probing) return;
@@ -66,12 +72,13 @@ export function useConversion(selection: SelectionState, dispatch: Dispatch<Sele
   }, [busy, selection.selecting, probing]);
 
   const media = probe && probe.path === path ? probe.media : null;
+  const image = imageProbe && imageProbe.path === path ? imageProbe.info : null;
   const formats = media?.formats ?? engine?.formats ?? [];
   const availability = formats.find(item => item.format === selection.output);
-  const canConvert = Boolean(mediaInput && engine?.ready && media && availability?.available && !busy && !engineLoading && !probing && !selection.selecting);
+  const canConvert = Boolean(((mediaInput && engine?.ready && media && availability?.available && isEngineFormat(selection.output)) || (imageInput && image && isImageFormat(selection.output))) && !busy && !engineLoading && !probing && !selection.selecting);
 
   async function start() {
-    if (operation.current || !canConvert || !selection.file || !isEngineFormat(selection.output)) return;
+    if (operation.current || !canConvert || !selection.file || (!isEngineFormat(selection.output) && !isImageFormat(selection.output))) return;
     operation.current = true; setStarting(true); setError(null); dispatch({ type: 'lock', locked: true });
     try { const next = await startConversion(selection.file.path, selection.output); setJob(previous => mergeJob(previous, next)); }
     catch (cause) { setError(nativeError(cause)); }
@@ -84,6 +91,6 @@ export function useConversion(selection: SelectionState, dispatch: Dispatch<Sele
     catch (cause) { setError(nativeError(cause)); }
     finally { setCancelling(false); }
   }
-  return { engine, engineLoading, media, probing, probeError, error, job, busy, starting, cancelling, formats, availability, canConvert, configure, start, cancel };
+  return { engine, engineLoading, media, image, probing, probeError, error, job, busy, starting, cancelling, formats, availability, canConvert, configure, start, cancel };
 }
 export type ConversionController = ReturnType<typeof useConversion>;

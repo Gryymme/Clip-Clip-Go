@@ -1,8 +1,14 @@
 import type { OutputFormat } from './formats.ts';
+import { imageOutputs } from './formats.ts';
 import type { SelectedFile } from './selection.ts';
 
 export const engineFormats = ['mp4', 'mkv', 'webm', 'mp3', 'wav', 'flac', 'm4a'] as const;
 export type EngineFormat = (typeof engineFormats)[number];
+export type ImageFormat = (typeof imageOutputs)[number];
+export type ConversionFormat = EngineFormat | ImageFormat;
+export interface ImageInfo {
+  width: number; height: number; format: ImageFormat; hasAlpha: boolean; orientationApplied: boolean;
+}
 export interface Availability { format: EngineFormat; available: boolean; reason: string | null }
 export interface EngineReport {
   ready: boolean; ffmpegVersion: string | null; ffprobeVersion: string | null;
@@ -15,10 +21,19 @@ export interface MediaInfo {
 export type JobPhase = 'validating' | 'choosingDestination' | 'running' | 'verifying' | 'cancelling' | 'succeeded' | 'failed' | 'cancelled';
 export interface ConversionJob {
   id: number; revision: number; phase: JobPhase; inputPath: string; destination: string | null;
-  format: EngineFormat; duration: number | null; seconds: number; percent: number | null; message: string;
+  format: ConversionFormat; duration: number | null; seconds: number; percent: number | null; message: string;
 }
 export function isMediaFile(file: SelectedFile | null): boolean { return file?.category === 'audio' || file?.category === 'video'; }
 export function isEngineFormat(format: OutputFormat | ''): format is EngineFormat { return (engineFormats as readonly string[]).includes(format); }
+export function isImageFormat(format: OutputFormat | ''): format is ImageFormat { return (imageOutputs as readonly string[]).includes(format); }
+export function isImageFile(file: SelectedFile | null): boolean { return file?.category === 'image'; }
+export function imageOutputHelp(info: ImageInfo | null, output: OutputFormat | ''): string {
+  if (!info) return 'The image must decode successfully before conversion.';
+  if (output === 'jpg') return info.hasAlpha
+    ? 'JPEG cannot preserve transparency. Transparent areas will be composited onto white. JPEG uses quality 90.'
+    : 'JPEG uses quality 90 and may change image detail.';
+  return 'Transparency is preserved. Output uses 8-bit channels; WebP encoding is lossless for these normalized pixels.';
+}
 export function jobIsBusy(job: ConversionJob | null): boolean {
   return job !== null && !['succeeded', 'failed', 'cancelled'].includes(job.phase);
 }

@@ -35,6 +35,7 @@ fn main() {
             "select_media_file",
             "configure_engines",
             "probe_media",
+            "probe_image",
             "start_conversion",
             "get_conversion_status",
             "cancel_conversion",

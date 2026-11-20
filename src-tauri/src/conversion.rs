@@ -112,7 +112,6 @@ impl Core {
                 "Select the input using the app's file dialog before converting it.".into(),
             );
         }
-        engine::is_video_input(&path)?;
         Ok(path)
     }
     fn engines(&self) -> Result<Engines> {
@@ -190,6 +189,7 @@ pub async fn probe_media(
 ) -> Result<MediaInfo> {
     let core = state.core.clone();
     let path = core.authorize(&input_path)?;
+    engine::is_video_input(&path)?;
     let engines = core.engines()?;
     let operation = core.reserve()?;
     tauri::async_runtime::spawn_blocking(move || {
@@ -205,12 +205,35 @@ pub async fn probe_media(
     .map_err(|_| "Media inspection could not be completed.".to_string())?
 }
 
+#[tauri::command]
+pub async fn probe_image(
+    state: tauri::State<'_, Runtime>,
+    input_path: String,
+) -> Result<crate::images::ImageInfo> {
+    let core = state.core.clone();
+    let path = core.authorize(&input_path)?;
+    if !crate::images::is_image_input(&path) {
+        return Err("Select a supported image file.".into());
+    }
+    let operation = core.reserve()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::images::decode(&path, &operation.control).map(|decoded| decoded.info)
+    })
+    .await
+    .map_err(|_| {
+        "Image inspection could not be completed. Choose a smaller or different image.".to_string()
+    })?
+}
+
 pub fn command_args(
     input: &Path,
     temp: &Path,
     format: OutputFormat,
     media: &MediaInfo,
 ) -> Result<Vec<String>> {
+    if format.image() {
+        return Err("Image formats cannot use the audio/video runner.".into());
+    }
     let mut args: Vec<String> = [
         "-hide_banner",
         "-nostdin",
@@ -396,6 +419,63 @@ fn validate_output(format: OutputFormat, input: &MediaInfo, output: &MediaInfo) 
     Ok(())
 }
 
+// The image writer receives the already-open handle, so cancellation cannot unlink
+// the staging path and then have an encoder recreate an unowned file at that path.
+pub struct StagedOutput<'a> {
+    control: &'a Control,
+    pub file: Option<std::fs::File>,
+    pub path: PathBuf,
+    destination: PathBuf,
+}
+impl Drop for StagedOutput<'_> {
+    fn drop(&mut self) {
+        drop(self.file.take());
+        self.control.cleanup();
+    }
+}
+impl StagedOutput<'_> {
+    pub fn publish(self) -> Result<PathBuf> {
+        let _publication = self.control.publication.lock().unwrap();
+        self.control.check()?;
+        let temporary = self
+            .control
+            .temporary
+            .lock()
+            .unwrap()
+            .take()
+            .ok_or(CANCELLED)?;
+        temporary.persist_noclobber(&self.destination).map_err(|_| "Could not publish the output. The destination may now exist or be inaccessible. Choose another filename.".to_string())?;
+        Ok(self.destination.clone())
+    }
+}
+pub fn stage_output<'a>(
+    input: &Path,
+    chosen: &Path,
+    format: OutputFormat,
+    control: &'a Control,
+) -> Result<StagedOutput<'a>> {
+    control.check()?;
+    let destination = destination_path(input, chosen, format)?;
+    let temporary = tempfile::Builder::new()
+        .prefix(".clip-clip-go-")
+        .suffix(&format!(".{}", format.extension()))
+        .tempfile_in(destination.parent().unwrap())
+        .map_err(|_| {
+            "Cannot create a temporary file beside the destination. Check folder permissions."
+                .to_string()
+        })?;
+    let (file, path) = temporary.into_parts();
+    let staged = StagedOutput {
+        control,
+        file: Some(file),
+        path: path.to_path_buf(),
+        destination,
+    };
+    *control.temporary.lock().unwrap() = Some(path);
+    control.check()?;
+    Ok(staged)
+}
+
 pub fn convert_to(
     engines: &Engines,
     input: &Path,
@@ -417,25 +497,9 @@ pub fn convert_to(
     if let Some(reason) = available.reason {
         return Err(reason);
     }
-    let destination = destination_path(input, chosen, format)?;
-    let temporary = tempfile::Builder::new()
-        .prefix(".clip-clip-go-")
-        .suffix(&format!(".{}", format.extension()))
-        .tempfile_in(destination.parent().unwrap())
-        .map_err(|_| {
-            "Cannot create a temporary file beside the destination. Check folder permissions."
-                .to_string()
-        })?
-        .into_temp_path();
-    let temporary_path = temporary.to_path_buf();
-    *control.temporary.lock().unwrap() = Some(temporary);
-    struct Cleanup<'a>(&'a Control);
-    impl Drop for Cleanup<'_> {
-        fn drop(&mut self) {
-            self.0.cleanup();
-        }
-    }
-    let _cleanup = Cleanup(control);
+    let mut staged = stage_output(input, chosen, format, control)?;
+    drop(staged.file.take());
+    let temporary_path = staged.path.clone();
     let args = command_args(input, &temporary_path, format, media)?;
     let result = runner.run(&engines.ffmpeg, &args, control, None, progress)?;
     control.check()?;
@@ -462,12 +526,7 @@ pub fn convert_to(
     }
     let output = engine::probe(engines, &temporary_path, runner, control)?;
     validate_output(format, media, &output)?;
-    let _publication = control.publication.lock().unwrap();
-    control.check()?;
-    // Atomic no-clobber publication on Windows. The RAII TempPath cleans up only this job's staging file.
-    let temporary = control.temporary.lock().unwrap().take().ok_or(CANCELLED)?;
-    temporary.persist_noclobber(&destination).map_err(|_|"Could not publish the output. The destination may now exist or be inaccessible. Choose another filename.".to_string())?;
-    Ok(destination)
+    staged.publish()
 }
 
 #[tauri::command]
@@ -479,7 +538,18 @@ pub fn start_conversion(
 ) -> Result<Job> {
     let core = state.core.clone();
     let input = core.authorize(&input_path)?;
-    let engines = core.engines()?;
+    let image_input = crate::images::is_image_input(&input);
+    if image_input != format.image() {
+        return Err("Choose an output appropriate for the selected input category.".into());
+    }
+    if !image_input {
+        engine::is_video_input(&input)?;
+    }
+    let engines = if image_input {
+        None
+    } else {
+        Some(core.engines()?)
+    };
     let operation = core.reserve()?;
     let id = core.sequence.fetch_add(1, Ordering::SeqCst) + 1;
     let job = Job {
@@ -492,25 +562,40 @@ pub fn start_conversion(
         duration: None,
         seconds: 0.0,
         percent: None,
-        message: "Validating the selected media…".into(),
+        message: if image_input {
+            "Decoding and validating the selected image…".into()
+        } else {
+            "Validating the selected media…".into()
+        },
     };
     core.inner.lock().unwrap().job = Some(job.clone());
     std::thread::spawn(move || {
         let result = (|| -> Result<PathBuf> {
-            let media = engine::probe(&engines, &input, &NativeRunner, &operation.control)?;
-            let allowed = engine::availability(
-                &engines.encoders,
-                format,
-                Some(&media),
-                engine::is_video_input(&input)?,
-            );
-            if let Some(reason) = allowed.reason {
-                return Err(reason);
-            }
+            let image = if image_input {
+                Some(crate::images::decode(&input, &operation.control)?)
+            } else {
+                None
+            };
+            let media = if let Some(engines) = engines.as_ref() {
+                let media = engine::probe(engines, &input, &NativeRunner, &operation.control)?;
+                if let Some(reason) = engine::availability(
+                    &engines.encoders,
+                    format,
+                    Some(&media),
+                    engine::is_video_input(&input)?,
+                )
+                .reason
+                {
+                    return Err(reason);
+                }
+                Some(media)
+            } else {
+                None
+            };
             operation.control.check()?;
             core.update(id, |j| {
                 j.phase = JobPhase::ChoosingDestination;
-                j.duration = media.duration;
+                j.duration = media.as_ref().and_then(|m| m.duration);
                 j.message = "Choose a new destination filename in the Save dialog.".into();
             });
             let stem = input.file_stem().unwrap_or_default().to_string_lossy();
@@ -532,6 +617,39 @@ pub fn start_conversion(
                 j.destination = Some(destination.to_string_lossy().into_owned());
                 j.message = "Converting…".into();
             });
+            if let Some(image) = image {
+                return crate::images::convert_to(
+                    image,
+                    &input,
+                    &destination,
+                    format,
+                    &operation.control,
+                    |stage| {
+                        core.update(id, |j| {
+                            if j.phase == JobPhase::Cancelling {
+                                return;
+                            }
+                            j.phase = if stage == "encoding" {
+                                JobPhase::Running
+                            } else {
+                                JobPhase::Verifying
+                            };
+                            j.message = match stage {
+                                "encoding" => "Encoding image…",
+                                "verifying" => {
+                                    "Decoding the output to validate its format and dimensions…"
+                                }
+                                _ => "Publishing the validated image…",
+                            }
+                            .into();
+                        });
+                    },
+                );
+            }
+            let media = media.ok_or("Media inspection did not complete.")?;
+            let engines = engines
+                .as_ref()
+                .ok_or("Bundled media engines are unavailable.")?;
             let progress_core = core.clone();
             let progress: LineHandler = Box::new(move |line| {
                 if let Some(seconds) = progress_seconds(line) {
@@ -566,7 +684,7 @@ pub fn start_conversion(
         core.update(id, |j| match result {
             Ok(path) => {
                 j.phase = JobPhase::Succeeded;
-                j.percent = Some(100.0);
+                j.percent = if image_input { None } else { Some(100.0) };
                 j.destination = Some(path.to_string_lossy().into_owned());
                 j.message = "Conversion completed and output validated.".into();
             }
@@ -597,7 +715,11 @@ pub fn cancel_conversion(state: tauri::State<'_, Runtime>, id: u64) -> Result<()
         }
         job.phase = JobPhase::Cancelling;
         job.revision += 1;
-        job.message = "Cancelling and cleaning up the temporary output…".into();
+        job.message = if job.format.image() {
+            "Cancelling… Waiting for the current image-processing step to finish, then removing its temporary output.".into()
+        } else {
+            "Cancelling and cleaning up the temporary output…".into()
+        };
         inner.active.clone()
     };
     if let Some(control) = control {

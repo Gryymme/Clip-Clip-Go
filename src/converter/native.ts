@@ -1,7 +1,7 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { inputExtensions } from './formats';
 import type { NativeFile } from './selection';
-import type { EngineReport, MediaInfo, EngineFormat, ConversionJob } from './conversion';
+import type { EngineReport, MediaInfo, ImageInfo, ConversionFormat, ConversionJob } from './conversion';
 
 export async function selectMediaFile(): Promise<NativeFile | null> {
   if (!isTauri()) throw { code: 'desktopRequired' };
@@ -15,7 +15,10 @@ export async function configureEngines(source: 'current' | 'bundled'): Promise<E
 export async function probeMedia(inputPath: string): Promise<MediaInfo> {
   desktop(); return invoke('probe_media', { inputPath });
 }
-export async function startConversion(inputPath: string, format: EngineFormat): Promise<ConversionJob> {
+export async function probeImage(inputPath: string): Promise<ImageInfo> {
+  desktop(); return invoke('probe_image', { inputPath });
+}
+export async function startConversion(inputPath: string, format: ConversionFormat): Promise<ConversionJob> {
   desktop(); return invoke('start_conversion', { inputPath, format });
 }
 export async function conversionStatus(): Promise<ConversionJob | null> { desktop(); return invoke('get_conversion_status'); }

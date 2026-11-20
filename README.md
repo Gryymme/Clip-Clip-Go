@@ -6,15 +6,15 @@ The working foundation uses Tauri 2, React, TypeScript, Vite, npm, and plain CSS
 
 ## Converter
 
-The Converter selects one local file through a native Windows file dialog and displays its name, full path, exact size, and preliminary video, audio, image, or document category. Metadata comes from the native layer without loading the file contents into memory. Replace and remove controls are available; cancellation or an unsuccessful replacement preserves the previous selection.
+The Converter selects one local file through a native Windows file dialog and displays its name, full path, exact size, and preliminary video, audio, image, or document category. File size and path come from native filesystem metadata; conversion providers inspect content separately. Replace and remove controls are available; cancellation or an unsuccessful replacement preserves the previous selection.
 
-Single-file **audio/video conversion is implemented**, using bundled FFmpeg and FFprobe executables. Users do not need to install engines, configure an engine folder, or change PATH. Available output choices depend on the bundled encoders and the actual media streams. Image/document selection remains available, with conversion disabled for those categories.
+Single-file **audio/video conversion is implemented**, using bundled FFmpeg and FFprobe executables. Users do not need to install engines, configure an engine folder, or change PATH. Available output choices depend on the bundled encoders and the actual media streams. Single-image conversion is also implemented with a compiled-in Rust provider; it needs no external tools. Document selection remains available, with conversion disabled.
 
 | Input | Outputs |
 | --- | --- |
 | MP4, MKV, WebM, MOV | MP4, MKV, WebM; audio extraction to MP3, WAV, FLAC, M4A |
 | MP3, WAV, FLAC, M4A, OGG | MP3, WAV, FLAC, M4A |
-| JPG/JPEG, PNG, WebP, BMP, TIFF/TIF | Planned only: JPG, PNG, WebP, BMP, TIFF |
+| JPG/JPEG, PNG, WebP, BMP, TIFF/TIF (single still image) | JPG, PNG, WebP, BMP, TIFF |
 | DOC, DOCX, ODT, RTF | Planned only: PDF, DOCX, ODT, TXT |
 | TXT | Planned only: PDF, DOCX, ODT |
 | PPT, PPTX, ODP | Planned only: PDF, PPTX, ODP |
@@ -42,6 +42,20 @@ The archive URL, SHA-256, executable hashes, target, exact compiler/configuratio
 | FLAC | `flac`, compression level 5 |
 | M4A | `aac`, 192 kb/s |
 
+## Converting one image
+
+Select a JPEG/JPG, PNG, WebP, BMP or TIFF/TIF file. The native provider decodes its content (the extension alone is not validation) and displays the detected format and dimensions. Choose an image output and use the same **Convert** action and native Save dialog. Images use the existing single-job lifecycle, navigation retention and output protection; audio/video and image jobs cannot run together. Image conversion works even when the FFmpeg sidecars are unavailable.
+
+Image support uses Rust `image = 0.25.10`, with only JPEG, PNG, WebP, BMP and TIFF codec features enabled and default features disabled. It compiles into the app: users install no image tools and download no image engines. JPEG output uses quality 90; PNG uses default compression/adaptive filtering; WebP uses lossless encoding of normalized pixels; BMP and TIFF use the library's fixed defaults. Aliases and case are normalized; output extensions are enforced as `.jpg`, `.png`, `.webp`, `.bmp` or `.tiff`.
+
+Dimensions are preserved after applying EXIF orientation to the pixels; a 90°/270° orientation swaps width and height. PNG, WebP, BMP (32-bit V4) and TIFF preserve transparency. JPEG cannot preserve alpha: transparent pixels are composited onto white, with a contextual explanation before conversion. Some other applications may not display alpha in BMP files correctly.
+
+Outputs are normalized to 8-bit RGB/RGBA channels. Source EXIF (including GPS), ICC profiles, textual metadata and other source metadata are not copied. Orientation is applied once rather than retained as an orientation tag. No ICC profile transformation or color-managed matching is performed; wide-gamut/profile-dependent images may change appearance. Higher bit-depth images lose precision, and JPEG is lossy. This is not a promise of lossless conversion or complete metadata/color preservation.
+
+Only single still images are accepted. APNG, animated WebP, multipage/SubIFD TIFF, multi-picture JPEG (MPF/MPO) and BMP arrays are rejected rather than silently dropping images. Unsupported image variants and corrupt/truncated content produce an error. Safety limits are 16 million pixels, 16,384 pixels per side, 128 MiB encoded input and 128 MiB decoded pixel data; a 128 MiB decoder-allocation budget is also requested. The library's allocation budget is best effort, not a hard cap on total process memory. Orientation, normalized pixels and encoders require additional bounded image buffers. Oversized images fail with a readable message.
+
+Decoding and encoding run off the UI thread. Image jobs show real stages and indeterminate progress, without estimated percentages or processed media time. Cancellation is checked between stages (and during compositing/header scans); a codec operation may need to finish first. After cancellation, its output is never published and its owned staging file is removed. Output is staged beside the destination, flushed, decoded again to verify its actual format and oriented dimensions, then published without overwriting. Originals and existing destinations are protected.
+
 ## Converting one audio/video file
 
 Select a file. FFprobe validates its container and identifies the first actual video stream and first audio stream; embedded cover art, subtitles, attachments, chapters, and metadata are excluded. Audio outputs require an audio stream. Video outputs use the first actual video stream and optional first audio stream. Odd video dimensions are rounded up to even dimensions for the fixed codec presets.
@@ -52,7 +66,7 @@ FFmpeg runs without a shell into a unique temporary file beside the destination.
 
 Only one conversion runs at a time. File, format, and engine controls are locked during the job. **Cancel conversion** terminates and reaps the owned process and cleans up only its staging file. Closing the app also stops its owned process and removes its active temporary output. Progress and terminal results remain visible when navigating away and back; there is no queue or conversion history.
 
-Image and document conversion is not available yet. Their categories remain extension-based, and their listed routes are plans whose actual support will be validated with future engines. Downloader, Queue, History, and Settings remain placeholders. Batch processing, downloading, OCR and advanced quality controls are not implemented.
+Document conversion is not available yet. Its category remains extension-based, and its listed routes are plans whose actual support will be validated with future engines. Downloader, Queue, History, and Settings remain placeholders. Batch processing, downloading, OCR and advanced quality controls are not implemented.
 
 ## Development
 
@@ -97,8 +111,8 @@ Inspect an MSI payload without installation using `powershell -NoProfile -File s
 - `npm run typecheck`: TypeScript checking.
 - `npm run build`: TypeScript checking and frontend production build.
 - `cargo check --manifest-path src-tauri/Cargo.toml`: native checking.
-- `cargo test --manifest-path src-tauri/Cargo.toml`: command/preset, FFprobe, progress, cancellation/reaping, output protection, and failure-cleanup tests. The real-engine smoke test runs with an empty PATH in an isolated child process, uses prepared sidecars, generates a short video/audio fixture and exercises all seven existing output presets plus audio-only WAV-to-FLAC in `src-tauri/target/conversion-tests`, with cleanup. Missing sidecars fail the test rather than silently skipping. Other tests use mock process results.
+- `cargo test --manifest-path src-tauri/Cargo.toml`: command/preset, FFprobe, progress, cancellation/reaping, output protection, and failure-cleanup tests, plus generated image fixtures for all 25 input/output pairs, alpha, EXIF orientation, animation/pages, decoding limits and cancellation. The real-engine smoke test runs with an empty PATH in an isolated child process, uses prepared sidecars, generates a short video/audio fixture and exercises all seven existing output presets plus audio-only WAV-to-FLAC in `src-tauri/target/conversion-tests`, with cleanup. Missing sidecars fail the test rather than silently skipping. Other tests use mock process results.
 
-The user confirmed selection and output choices for all four categories before this milestone. Manual conversion and native dialog testing are performed by the user. Automated checks do not establish manual functionality verification.
+The user confirmed selection and output choices for all four categories before image conversion was added. Manual conversion and native dialog testing are performed by the user. Automated checks do not establish manual functionality verification.
 
-Manual checklist: install the development MSI yourself, launch without system FFmpeg or an engine folder and check bundled version details; convert a short video and extract audio to new filenames; check a silent video and a corrupt file; cancel a longer conversion and verify no destination or staging file remains; attempt an existing/identical destination; navigate away/back while converting; close the app during a job; recheck image/document selection with their conversion buttons disabled.
+Manual checklist: launch current source with `npm run tauri dev` (or rebuild and install an updated MSI yourself); an existing installer does not update automatically when source changes. Check bundled versions without system FFmpeg or an engine folder; convert a short video and extract audio to new filenames; check a silent video and a corrupt file; cancel a longer conversion and verify no destination or staging file remains; attempt an existing/identical destination; navigate away/back while converting; close the app during a job; convert images across the five formats, check oriented dimensions and transparent PNG-to-JPEG white compositing; reject animated/multipage, corrupt and oversized images; recheck document selection with conversion disabled.

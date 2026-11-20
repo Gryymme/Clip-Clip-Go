@@ -1,17 +1,17 @@
 import type { ConversionController } from './useConversion';
-import { displayDuration, isMediaFile, jobIsBusy } from './conversion';
+import { displayDuration, isMediaFile, isImageFile, isImageFormat, jobIsBusy } from './conversion';
 import type { SelectedFile } from './selection';
 
 export function EngineSetup({ controller: c, selecting }: { controller: ConversionController; selecting: boolean }) {
   const disabled = selecting || c.busy || c.engineLoading || c.probing;
   if (c.engineLoading) return <p className="field-help" role="status">Checking bundled conversion engines…</p>;
   if (!c.engine?.ready) return <section className="converter-section" aria-labelledby="engine-heading">
-    <h2 id="engine-heading">Conversion engines unavailable</h2>
+    <h2 id="engine-heading">Audio/video engines unavailable</h2>
     <p className="selection-error" role="alert">{c.engine?.message ?? 'Repair or reinstall Clip-Clip-Go to restore its bundled engines.'}</p>
     <button className="button" type="button" disabled={disabled} onClick={() => void c.configure('bundled')}>Check bundled engines again</button>
   </section>;
   return <details className="supported-inputs field-help">
-    <summary>Bundled engine versions</summary>
+    <summary>Audio/video engine versions</summary>
     <p className="engine-version">{c.engine.ffmpegVersion}</p>
     <p className="engine-version">{c.engine.ffprobeVersion}</p>
   </details>;
@@ -19,7 +19,10 @@ export function EngineSetup({ controller: c, selecting }: { controller: Conversi
 
 export function ConversionActions({ controller: c, file }: { controller: ConversionController; file: SelectedFile | null }) {
   const mediaInput = isMediaFile(file);
-  const reason = !file ? 'Select an audio or video file to convert.' : !mediaInput ? 'Image and document conversion is not available yet.'
+  const imageInput = isImageFile(file);
+  const imageJob = c.job !== null && isImageFormat(c.job.format);
+  const reason = !file ? 'Select an audio, video or image file to convert.' : !mediaInput && !imageInput ? 'Document conversion is not available yet.'
+    : imageInput ? c.probing ? 'Decoding and checking the image…' : c.probeError ? 'Select another image to continue.' : !c.image ? 'Waiting for image validation…' : 'Choose a new destination filename. The original and existing files will be preserved.'
     : c.engineLoading ? 'Checking the conversion engines…' : !c.engine?.ready ? 'Restore the bundled engines to enable audio/video conversion.'
     : c.probing ? 'Inspecting media with FFprobe…' : c.probeError ? 'Select another file to continue.' : c.availability?.reason ? 'Choose an available output format.' : 'Choose a destination filename. The original and existing files will be preserved.';
   return <>
@@ -29,9 +32,9 @@ export function ConversionActions({ controller: c, file }: { controller: Convers
       Duration: {displayDuration(c.media.duration)}.
     </p>}
     {c.error && <p className="selection-error" role="alert">{c.error}</p>}
-    {mediaInput && c.probeError && <p className="selection-error" role="alert">{c.probeError}</p>}
+    {(mediaInput || imageInput) && c.probeError && <p className="selection-error" role="alert">{c.probeError}</p>}
     <div className="conversion-action">
-      <button className="button button-primary" type="button" disabled={!c.canConvert} aria-describedby="conversion-limitation" onClick={() => void c.start()}>{c.starting ? 'Preparing…' : 'Convert'}</button>
+      <button className="button button-primary" type="button" disabled={!c.canConvert} aria-describedby="conversion-limitation output-availability" onClick={() => void c.start()}>{c.starting ? 'Preparing…' : 'Convert'}</button>
       <p className="field-help" id="conversion-limitation">{c.busy ? 'One conversion at a time. File and format controls are locked until this job finishes.' : reason}</p>
     </div>
     {c.job && <section className="conversion-job" aria-labelledby="job-heading">
@@ -39,7 +42,7 @@ export function ConversionActions({ controller: c, file }: { controller: Convers
       <p className="job-message" data-phase={c.job.phase} role={c.job.phase === 'failed' ? 'alert' : 'status'}>{c.job.message}</p>
       {(jobIsBusy(c.job) || c.job.phase === 'succeeded') && <>
         <progress aria-label="Conversion progress" max={100} value={c.job.phase === 'succeeded' ? 100 : c.job.phase === 'running' ? c.job.percent ?? undefined : undefined} />
-        <p className="field-help numeric-value">{c.job.phase === 'running' ? `${c.job.percent === null ? 'Duration unavailable · ' : `${Math.floor(c.job.percent)}% · `}${displayDuration(c.job.seconds)} processed` : c.job.phase === 'succeeded' ? '100% · Output validated' : 'Waiting for the current native operation…'}</p>
+        {!imageJob && <p className="field-help numeric-value">{c.job.phase === 'running' ? `${c.job.percent === null ? 'Duration unavailable · ' : `${Math.floor(c.job.percent)}% · `}${displayDuration(c.job.seconds)} processed` : c.job.phase === 'succeeded' ? '100% · Output validated' : 'Waiting for the current native operation…'}</p>}
       </>}
       <dl className="file-details">
         <div><dt>Input</dt><dd className="file-path" dir="auto">{c.job.inputPath}</dd></div>

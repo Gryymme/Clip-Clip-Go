@@ -5,6 +5,7 @@ mod conversion;
 mod engine;
 #[path = "../engine_integrity.rs"]
 mod engine_integrity;
+mod images;
 mod media;
 mod process;
 
@@ -16,6 +17,7 @@ fn main() {
             media::select_media_file,
             conversion::configure_engines,
             conversion::probe_media,
+            conversion::probe_image,
             conversion::start_conversion,
             conversion::get_conversion_status,
             conversion::cancel_conversion

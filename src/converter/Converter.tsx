@@ -5,7 +5,7 @@ import { selectMediaFile } from './native';
 import { formatFileSize, selectionError } from './selection';
 import type { SelectionAction, SelectionState } from './selection';
 import type { ConversionController } from './useConversion';
-import { isMediaFile } from './conversion';
+import { isMediaFile, isImageFile, imageOutputHelp } from './conversion';
 import { ConversionActions, EngineSetup } from './ConversionControls';
 
 export default function Converter({ state, dispatch, busy, conversion }: {
@@ -17,6 +17,7 @@ export default function Converter({ state, dispatch, busy, conversion }: {
   const selectButton = useRef<HTMLButtonElement>(null);
   const { file, selecting } = state;
   const mediaInput = isMediaFile(file);
+  const imageInput = isImageFile(file);
   const locked = state.locked || conversion.busy;
   const inspecting = conversion.engineLoading || conversion.probing;
 
@@ -66,14 +67,18 @@ export default function Converter({ state, dispatch, busy, conversion }: {
           <div><dt>Full path</dt><dd className="file-path" dir="auto">{file.path}</dd></div>
           <div><dt>Size</dt><dd className="file-size">{formatFileSize(file.sizeBytes)}</dd></div>
           <div><dt>Category</dt><dd>{categoryLabels[file.category]} (based on extension)</dd></div>
+          {imageInput && conversion.image && <>
+            <div><dt>Detected format</dt><dd>{conversion.image.format.toUpperCase()} (decoded)</dd></div>
+            <div><dt>Dimensions</dt><dd className="numeric-value">{new Intl.NumberFormat().format(conversion.image.width)} × {new Intl.NumberFormat().format(conversion.image.height)} pixels{conversion.image.orientationApplied ? ' (after EXIF orientation)' : ''}</dd></div>
+          </>}
         </dl> : <p className="field-help">No file selected.</p>}
-        <p className="field-help">Category is based on the extension. Audio/video streams are checked with FFprobe when the engines are ready; image and document content inspection is not implemented.</p>
+        <p className="field-help">Category starts with the extension. Audio/video streams are checked with FFprobe; images are validated by decoding. Document content inspection is not implemented.</p>
       </section>
       {(!file || mediaInput) && <EngineSetup controller={conversion} selecting={selecting} />}
       <section className="converter-section" aria-labelledby="output-heading">
         <h2 id="output-heading">Choose an output format</h2>
         <label className="field-label" htmlFor="output-format">Output format</label>
-        <select id="output-format" value={state.output} disabled={!file || selecting || locked || (mediaInput && (!conversion.engine?.ready || inspecting))}
+        <select id="output-format" value={state.output} disabled={!file || selecting || locked || ((mediaInput || imageInput) && inspecting) || (mediaInput && !conversion.engine?.ready)}
           aria-describedby="output-help output-availability" onChange={event => dispatch({ type: 'output', format: event.target.value })}>
           {!file && <option value="">Select a file first</option>}
           {file && outputGroups(file.format).map(group => <optgroup key={group.label} label={group.label}>
@@ -83,8 +88,12 @@ export default function Converter({ state, dispatch, busy, conversion }: {
             })}
           </optgroup>)}
         </select>
-        <p className="field-help" id="output-help">{file && state.output ? outputHelp(file.format, state.output) : 'Select a file to see its planned outputs.'}</p>
-        <p className="field-help" id="output-availability">{mediaInput ? conversion.availability?.reason ?? 'Formats depend on the selected media streams and bundled encoders.' : file ? 'These are planned conversion routes. Actual support will be validated when conversion engines are integrated.' : ''}</p>
+        <p className="field-help" id="output-help">{file && state.output ? outputHelp(file.format, state.output) : 'Select a file to see compatible outputs.'}</p>
+        <p className="field-help" id="output-availability">{mediaInput ? conversion.availability?.reason ?? 'Formats depend on the selected media streams and bundled encoders.' : imageInput ? imageOutputHelp(conversion.image, state.output) : file ? 'These are planned conversion routes. Actual support will be validated when conversion engines are integrated.' : ''}</p>
+        {imageInput && <details className="supported-inputs field-help">
+          <summary>Image conversion details</summary>
+          <p>Single still images only. Outputs use 8-bit channels. EXIF orientation is applied to the pixels; other source metadata and color profiles are not copied. No ICC color-profile conversion is performed, so some images may look different. Cancellation takes effect at the next safe processing boundary.</p>
+        </details>}
       </section>
       <ConversionActions controller={conversion} file={file} />
     </div>

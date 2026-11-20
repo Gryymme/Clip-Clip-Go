@@ -16,6 +16,13 @@ pub enum OutputFormat {
     Wav,
     Flac,
     M4a,
+    #[serde(alias = "jpeg")]
+    Jpg,
+    Png,
+    Webp,
+    Bmp,
+    #[serde(alias = "tif")]
+    Tiff,
 }
 pub const FORMATS: [OutputFormat; 7] = [
     OutputFormat::Mp4,
@@ -37,10 +44,21 @@ impl OutputFormat {
             Self::Wav => "wav",
             Self::Flac => "flac",
             Self::M4a => "m4a",
+            Self::Jpg => "jpg",
+            Self::Png => "png",
+            Self::Webp => "webp",
+            Self::Bmp => "bmp",
+            Self::Tiff => "tiff",
         }
     }
     pub fn video(self) -> bool {
         matches!(self, Self::Mp4 | Self::Mkv | Self::Webm)
+    }
+    pub fn image(self) -> bool {
+        matches!(
+            self,
+            Self::Jpg | Self::Png | Self::Webp | Self::Bmp | Self::Tiff
+        )
     }
     pub fn codecs(self) -> (Option<&'static str>, &'static str) {
         match self {
@@ -50,6 +68,7 @@ impl OutputFormat {
             Self::Wav => (None, "pcm_s16le"),
             Self::Flac => (None, "flac"),
             Self::M4a => (None, "aac"),
+            Self::Jpg | Self::Png | Self::Webp | Self::Bmp | Self::Tiff => (None, ""),
         }
     }
 }
@@ -109,7 +128,9 @@ pub fn availability(
     video_input: bool,
 ) -> Availability {
     let (video_codec, audio_codec) = format.codecs();
-    let reason = if format.video() && !video_input {
+    let reason = if format.image() {
+        Some("Image outputs require an image input and the built-in image converter.".into())
+    } else if format.video() && !video_input {
         Some("Audio inputs offer audio outputs only.".into())
     } else if format.video() && media.is_some_and(|m| m.video.is_none()) {
         Some("No actual video stream was found.".into())
@@ -315,6 +336,9 @@ pub fn is_video_input(path: &Path) -> Result<bool> {
     {
         "mp4" | "mkv" | "webm" | "mov" => Ok(true),
         "mp3" | "wav" | "flac" | "m4a" | "ogg" => Ok(false),
-        _ => Err("Image and document conversion is not available yet.".into()),
+        _ => Err(
+            "This is not a supported audio/video input. Document conversion is not available yet."
+                .into(),
+        ),
     }
 }
