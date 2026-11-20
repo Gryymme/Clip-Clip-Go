@@ -63,6 +63,7 @@ pub struct Core {
 pub struct Runtime {
     pub core: Arc<Core>,
     pub previews: crate::preview::Previews,
+    pub drops: Mutex<Vec<PathBuf>>,
 }
 struct Operation {
     core: Arc<Core>,
@@ -847,6 +848,7 @@ pub fn start_images_pdf(
         return Err("Choose 1–100 still images.".into());
     }
     let core = state.core.clone();
+    crate::pdf::image_page_dimensions(page_size, 1.0, 1.0)?;
     let inputs = input_paths
         .iter()
         .map(|p| {

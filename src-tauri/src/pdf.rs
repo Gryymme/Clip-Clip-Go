@@ -38,7 +38,13 @@ pub struct PdfOptions {
 pub enum ImagePageSize {
     #[default]
     A4,
+    Letter,
+    Legal,
     Image,
+    Custom {
+        width: f64,
+        height: f64,
+    },
 }
 
 fn err(e: impl std::fmt::Debug) -> String {
@@ -591,6 +597,26 @@ pub fn generate(
     validate_pdf(&output.path, count, control)?;
     output.publish()
 }
+pub fn image_page_dimensions(size: ImagePageSize, w: f32, h: f32) -> Result<(f32, f32, f32)> {
+    let (pw, ph, margin) = match size {
+        ImagePageSize::A4 => (210.0 / 25.4 * 72.0, 297.0 / 25.4 * 72.0, 36.0),
+        ImagePageSize::Letter => (612.0, 792.0, 36.0),
+        ImagePageSize::Legal => (612.0, 1008.0, 36.0),
+        ImagePageSize::Image => return Ok((w * 72.0 / 150.0, h * 72.0 / 150.0, 0.0)),
+        ImagePageSize::Custom { width, height } => (width, height, 36.0),
+    };
+    if !pw.is_finite() || !ph.is_finite() || pw < 72.0 || ph < 72.0 || pw > 14400.0 || ph > 14400.0
+    {
+        return Err("Page dimensions must be finite and between 1 and 200 inches.".into());
+    }
+    if (pw as f32) <= 2.0 * (margin as f32) || (ph as f32) <= 2.0 * (margin as f32) {
+        return Err(
+            "Margins must leave a positive usable page area; use dimensions greater than 1 inch."
+                .into(),
+        );
+    }
+    Ok((pw as f32, ph as f32, margin as f32))
+}
 pub fn images_to_pdf(
     inputs: &[PathBuf],
     chosen: &Path,
@@ -623,10 +649,7 @@ pub fn images_to_pdf(
                     .into(),
             );
         }
-        let (pw, ph, margin) = match size {
-            ImagePageSize::A4 => (595.276, 841.89, 36.0),
-            ImagePageSize::Image => (w * 72.0 / 150.0, h * 72.0 / 150.0, 0.0),
-        };
+        let (pw, ph, margin) = image_page_dimensions(size, w, h)?;
         let scale = ((pw - 2.0 * margin) / w).min((ph - 2.0 * margin) / h);
         let (iw, ih) = (w * scale, h * scale);
         let mut page = doc

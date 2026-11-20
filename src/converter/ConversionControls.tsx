@@ -25,7 +25,7 @@ export function JobStatus({ controller: c }: { controller: ConversionController 
 }
 export function ConversionActions({ controller: c, file, imagesMode = false }: { controller: ConversionController; file: SelectedFile | null; imagesMode?: boolean }) {
   const folder = !imagesMode && file?.format === 'pdf' && c.outputIsFolder;
-  const disabled = imagesMode ? !c.images.length || c.busy || c.adding || c.engineLoading || c.probing : !c.canConvert;
+  const disabled = imagesMode ? !c.images.length || Boolean(c.pageSizeError) || c.busy || c.adding || c.engineLoading || c.probing : !c.canConvert;
   return <>
     {!imagesMode && c.probeError && <p className="selection-error" role="alert">{c.probeError}</p>}
     {c.error && <p className="selection-error" role="alert">{c.error}</p>}

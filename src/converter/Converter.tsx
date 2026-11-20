@@ -1,14 +1,14 @@
 import { useRef } from 'react';
 import type { Dispatch } from 'react';
 import { inputGroups, outputGroups, outputHelp, isTextInput } from './formats';
-import { selectMediaFile } from './native';
+import { claimDrop, selectMediaFile } from './native';
 import { selectionError } from './selection';
 import type { SelectionAction, SelectionState } from './selection';
 import type { ConversionController } from './useConversion';
 import { isMediaFile, isImageFile, imageOutputHelp } from './conversion';
 import { ConversionActions, EngineSetup } from './ConversionControls';
 import FileSummary from './FileSummary';
-import Icon from '../components/Icon';
+import {DropSelection,EmptySelectionCard} from './SelectionCard';
 
 export default function Converter({ state, dispatch, busy, conversion: c }: {
   state: SelectionState; dispatch: Dispatch<SelectionAction>; busy: { current: boolean }; conversion: ConversionController;
@@ -19,20 +19,26 @@ export default function Converter({ state, dispatch, busy, conversion: c }: {
   const textInput = file !== null && isTextInput(file.format), pdfInput = file?.format === 'pdf';
   const locked = state.locked || c.busy || c.adding;
   const inspecting = c.engineLoading || c.probing;
-  async function selectFile() {
+  async function selectFile(paths?: string[]) {
     if (busy.current || locked || inspecting) return;
     busy.current = true; dispatch({ type: 'start' });
-    try { dispatch({ type: 'selected', file: await selectMediaFile() }); }
-    catch (cause) { dispatch({ type: 'failed', message: selectionError(cause) }); }
+    try {
+      let file;
+      if(paths){const result=await claimDrop(paths,false);if(result.rejected.length)throw result.rejected.join(' ');file=result.files[0]??null;}else file=await selectMediaFile();
+      dispatch({ type: 'selected', file });
+    }
+    catch (cause) { dispatch({ type: 'failed', message: typeof cause==='string'?cause:selectionError(cause) }); }
     finally { busy.current = false; }
   }
   function removeFile() { dispatch({ type: 'remove' }); selectButton.current?.focus(); }
-  const chooseButton = <button className={`button ${file ? 'button-secondary' : 'button-primary'}`} type="button" ref={selectButton} disabled={locked || inspecting || selecting} onClick={selectFile}>{selecting ? 'Choosing…' : file ? 'Replace' : 'Choose file'}</button>;
+  const chooseButton = <button className={`button ${file ? 'button-secondary' : 'button-primary'}`} type="button" ref={selectButton} disabled={locked || inspecting || selecting} onClick={() => void selectFile()}>{selecting ? 'Choosing…' : file ? 'Replace' : 'Choose file'}</button>;
   return <div className="converter">
     <section className="workflow-section" aria-labelledby="input-heading">
       <h2 id="input-heading">Selected file</h2>
+      <DropSelection multiple={false} locked={locked || inspecting || selecting} onDrop={selectFile} onError={message=>{if(locked||selecting||busy.current||inspecting)return;dispatch({type:'start'});dispatch({type:'failed',message});}}>
       {file ? <FileSummary file={file} conversion={c} actions={<>{chooseButton}<button className="button button-quiet button-destructive" type="button" disabled={locked || inspecting || selecting} onClick={removeFile}>Remove</button></>} />
-        : <div className="file-summary file-empty"><div className="file-preview"><Icon name="document" /></div><div className="file-summary-content"><h3>Choose a file to convert</h3><p className="field-help">Video, audio, images, text or PDF.</p></div><div className="file-summary-actions">{chooseButton}</div></div>}
+        : <EmptySelectionCard title="Choose a file to convert" description="Drop one file here, or choose video, audio, an image, text or PDF." actions={chooseButton} />}
+      </DropSelection>
       <p className="sr-only" role="status">{selecting ? 'Waiting for the native file dialog.' : state.notice}</p>
       {state.error && <p className="selection-error" role="alert">{state.error}{file && ' Your previous selection is unchanged.'}</p>}
       <details className="supported-inputs field-help"><summary>Supported formats</summary><dl>{inputGroups.map(group => <div key={group.label}><dt>{group.label}</dt><dd>{group.extensions.map(e => e.toUpperCase()).join(', ')}</dd></div>)}</dl><p>Microsoft Office and OpenDocument files are unsupported.</p></details>

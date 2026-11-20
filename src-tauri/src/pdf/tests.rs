@@ -385,3 +385,98 @@ fn rotation_exif_multipage_and_safe_boundary_cancellation() {
     .is_err());
     assert!(!dir.path().join("cancel-text.pdf").exists());
 }
+
+#[test]
+fn image_page_presets_and_custom_dimensions_are_written_to_actual_pdfs() {
+    let dir = work();
+    let a = dir.path().join("landscape.png");
+    let b = dir.path().join("portrait.png");
+    fixture(&a, [255, 0, 0, 255], 80, 40);
+    fixture(&b, [0, 0, 255, 255], 40, 80);
+    for (i, size) in [
+        ImagePageSize::A4,
+        ImagePageSize::Letter,
+        ImagePageSize::Legal,
+        ImagePageSize::Image,
+        ImagePageSize::Custom {
+            width: 547.125,
+            height: 845.9875,
+        },
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let output = dir.path().join(format!("size-{i}.pdf"));
+        images_to_pdf(
+            &[a.clone(), b.clone()],
+            &output,
+            size,
+            &Control::default(),
+            &mut quiet,
+        )
+        .unwrap();
+        let _lock = SERIAL.lock().unwrap();
+        let doc = load(library().unwrap(), &output).unwrap();
+        assert_eq!(doc.pages().len(), 2);
+        for (page_index, (w, h)) in [(80.0, 40.0), (40.0, 80.0)].into_iter().enumerate() {
+            let (expected_w, expected_h) = match size {
+                ImagePageSize::A4 => (595.2756, 841.8898),
+                ImagePageSize::Letter => (612.0, 792.0),
+                ImagePageSize::Legal => (612.0, 1008.0),
+                ImagePageSize::Image => (w * 72.0 / 150.0, h * 72.0 / 150.0),
+                ImagePageSize::Custom { .. } => (547.125, 845.9875),
+            };
+            let page = doc.pages().get(page_index as i32).unwrap();
+            assert!((page.width().value - expected_w).abs() < 0.02);
+            assert!((page.height().value - expected_h).abs() < 0.02);
+        }
+    }
+    let custom: ImagePageSize =
+        serde_json::from_str(r#"{"custom":{"width":612,"height":792}}"#).unwrap();
+    assert_eq!(
+        image_page_dimensions(custom, 1.0, 1.0).unwrap(),
+        (612.0, 792.0, 36.0)
+    );
+}
+#[test]
+fn image_page_bounds_and_margins_reject_invalid_requests() {
+    for value in [0.0, -1.0, f64::NAN, f64::INFINITY, 71.0, 14401.0] {
+        assert!(image_page_dimensions(
+            ImagePageSize::Custom {
+                width: value,
+                height: 792.0
+            },
+            1.0,
+            1.0
+        )
+        .is_err());
+        assert!(image_page_dimensions(
+            ImagePageSize::Custom {
+                width: 612.0,
+                height: value
+            },
+            1.0,
+            1.0
+        )
+        .is_err());
+    }
+    assert!(image_page_dimensions(
+        ImagePageSize::Custom {
+            width: 72.0,
+            height: 792.0
+        },
+        1.0,
+        1.0
+    )
+    .unwrap_err()
+    .contains("Margins"));
+    assert!(image_page_dimensions(
+        ImagePageSize::Custom {
+            width: 73.0,
+            height: 14400.0
+        },
+        1.0,
+        1.0
+    )
+    .is_ok());
+}

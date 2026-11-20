@@ -71,6 +71,7 @@ fn main() {
             "cancel_preview",
             "probe_pdf",
             "select_images",
+            "claim_drop",
             "start_images_pdf",
             "start_conversion",
             "get_conversion_status",

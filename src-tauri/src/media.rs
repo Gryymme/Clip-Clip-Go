@@ -140,3 +140,138 @@ mod tests {
         );
     }
 }
+
+#[derive(Serialize)]
+pub struct DropResult {
+    files: Vec<MediaFile>,
+    rejected: Vec<String>,
+}
+fn inspect_drop(
+    paths: Vec<std::path::PathBuf>,
+    images_only: bool,
+    core: &crate::conversion::Core,
+) -> DropResult {
+    let mut result = DropResult {
+        files: Vec::new(),
+        rejected: Vec::new(),
+    };
+    for path in paths {
+        let info = (|| {
+            if !path.is_absolute() {
+                return Err("Drop a local file, not a URL.".to_string());
+            }
+            let info = file_metadata(&path).map_err(|e| {
+                match e {
+                    SelectionError::MissingFile => "File is missing.",
+                    SelectionError::NotAFile => {
+                        "Directories and other non-file items are unsupported."
+                    }
+                    SelectionError::PermissionDenied => "File access was denied.",
+                    _ => "File metadata could not be read.",
+                }
+                .to_string()
+            })?;
+            if images_only && !crate::images::is_image_input(&path) {
+                return Err("Unsupported image format.".into());
+            }
+            core.remember(&path);
+            Ok(info)
+        })();
+        match info {
+            Ok(info) => result.files.push(info),
+            Err(e) => result.rejected.push(format!(
+                "{}: {e}",
+                path.file_name().unwrap_or_default().to_string_lossy()
+            )),
+        }
+    }
+    result
+}
+fn consume_drop(
+    pending: &mut Vec<std::path::PathBuf>,
+    paths: &[std::path::PathBuf],
+    images_only: bool,
+    busy: bool,
+) -> Result<(), String> {
+    if busy {
+        return Err("Finish or cancel the active conversion before changing files.".into());
+    }
+    if paths.is_empty() || paths.len() > 100 {
+        return Err("Drop between 1 and 100 local files.".into());
+    }
+    if !images_only && paths.len() != 1 {
+        return Err("Choose one file.".into());
+    }
+    if pending.as_slice() != paths {
+        return Err(
+            "Drop files onto the selection card again; this drop is no longer available.".into(),
+        );
+    }
+    pending.clear();
+    Ok(())
+}
+#[tauri::command]
+pub async fn claim_drop(
+    state: tauri::State<'_, crate::conversion::Runtime>,
+    paths: Vec<std::path::PathBuf>,
+    images_only: bool,
+) -> Result<DropResult, String> {
+    consume_drop(
+        &mut state.drops.lock().unwrap(),
+        &paths,
+        images_only,
+        state.core.busy(),
+    )?;
+    let core = state.core.clone();
+    tauri::async_runtime::spawn_blocking(move || inspect_drop(paths, images_only, &core))
+        .await
+        .map_err(|_| "File metadata could not be read.".to_string())
+}
+
+#[cfg(test)]
+mod drop_tests {
+    use super::*;
+    #[test]
+    fn native_drop_capability_is_single_use_and_rejects_substitution_multiple_and_busy() {
+        let paths = vec![std::path::PathBuf::from("C:/test.png")];
+        let mut pending = paths.clone();
+        assert!(consume_drop(&mut pending, &paths, false, true).is_err());
+        assert_eq!(pending, paths);
+        assert!(consume_drop(&mut pending, &["C:/other.png".into()], false, false).is_err());
+        let multiple = vec![paths[0].clone(), "C:/two.png".into()];
+        pending = multiple.clone();
+        assert!(consume_drop(&mut pending, &multiple, false, false)
+            .unwrap_err()
+            .contains("Choose one"));
+        assert!(consume_drop(&mut pending, &multiple, true, false).is_ok());
+        assert!(consume_drop(&mut pending, &multiple, true, false).is_err());
+    }
+    #[test]
+    fn drop_metadata_reports_rejections_and_keeps_valid_delivered_order() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/drop-tests");
+        std::fs::create_dir_all(&root).unwrap();
+        let dir = tempfile::tempdir_in(root).unwrap();
+        let a = dir.path().join("a.png");
+        let b = dir.path().join("b.jpg");
+        std::fs::write(&a, b"fixture").unwrap();
+        std::fs::write(&b, b"fixture").unwrap();
+        let core = crate::conversion::Core::default();
+        let result = inspect_drop(
+            vec![
+                a.clone(),
+                dir.path().to_path_buf(),
+                dir.path().join("missing.png"),
+                b.clone(),
+                "https://example.test/image.png".into(),
+            ],
+            true,
+            &core,
+        );
+        assert_eq!(result.files.len(), 2);
+        assert_eq!(result.files[0].name, "a.png");
+        assert_eq!(result.files[1].name, "b.jpg");
+        assert_eq!(result.rejected.len(), 3);
+        assert!(core.authorize(a.to_str().unwrap()).is_ok());
+        assert!(core.authorize(b.to_str().unwrap()).is_ok());
+    }
+}

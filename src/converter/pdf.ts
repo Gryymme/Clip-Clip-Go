@@ -23,3 +23,15 @@ export function pageRangeError(value: string, count: number): string | null {
   }
   return null;
 }
+
+export function appendDroppedImages(current:readonly NativeFile[],added:readonly NativeFile[],locked=false){
+ if(locked)return {files:[...current],rejected:['Finish or cancel the active conversion before changing files.']};
+ const files=[...current],rejected:string[]=[];
+ for(const file of added){
+  if(identifyFile(file.name)?.category!=='image'){rejected.push(`${file.name}: unsupported image format.`);continue;}
+  if(files.some(f=>f.path.toLowerCase()===file.path.toLowerCase()))continue;
+  if(files.length>=100){rejected.push(`${file.name}: the 100-image limit has been reached.`);continue;}
+  files.push(file);
+ }
+ return {files,rejected};
+}

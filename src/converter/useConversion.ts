@@ -1,11 +1,12 @@
+import {initialSize,sizeError,sizePayload,type PageSize} from './pageSize';
 import { isDocumentRoute } from './formats';
-import { addImages, moveImage, pageRangeError } from './pdf';
+import { appendDroppedImages, addImages, moveImage, pageRangeError } from './pdf';
 import { useImagePreviews } from './useImagePreviews';
 import { useFilePreview } from './useFilePreview';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Dispatch } from 'react';
 import type { NativeFile, SelectionAction, SelectionState } from './selection';
-import { cancelConversion, configureEngines, conversionStatus, probeMedia, probeImage, probePdf, selectImages, startImagesPdf, startConversion } from './native';
+import { claimDrop, cancelConversion, configureEngines, conversionStatus, probeMedia, probeImage, probePdf, selectImages, startImagesPdf, startConversion } from './native';
 import { isEngineFormat, isImageFormat, isTextFormat, isImageFile, isMediaFile, jobIsBusy, mergeJob, nativeError } from './conversion';
 import type { ConversionJob, EngineReport, MediaInfo, ImageInfo, PdfInfo } from './conversion';
 
@@ -16,7 +17,9 @@ export function useConversion(selection: SelectionState, dispatch: Dispatch<Sele
   const [pdfProbe, setPdfProbe] = useState<{path: string; info: PdfInfo} | null>(null);
   const [pdfPages, setPdfPages] = useState('');
   const [images, setImages] = useState<NativeFile[]>([]);
-  const [pageSize, setPageSize] = useState<'a4' | 'image'>('a4');
+  const [pageSize, setPageSize] = useState<PageSize>('a4');
+  const [customSize,setCustomSize] = useState(initialSize);
+  const pageSizeError = pageSize==='custom'?sizeError(customSize):null;
   const [adding, setAdding] = useState(false);
   const [imageProbe, setImageProbe] = useState<{ path: string; info: ImageInfo } | null>(null);
   const [probing, setProbing] = useState(false);
@@ -99,17 +102,20 @@ export function useConversion(selection: SelectionState, dispatch: Dispatch<Sele
     catch (cause) { setError(nativeError(cause)); }
     finally { operation.current = false; setStarting(false); }
   }
-  async function chooseImages() {
+  async function chooseImages(paths?:string[]) {
     if (operation.current || busy || probing || engineLoading || selection.selecting) return;
     operation.current = true; setAdding(true); setError(null);
-    try { const added = await selectImages(); if (added) setImages(addImages(images, added)); }
+    try {
+      if(paths){const result=await claimDrop(paths,true);const appended=appendDroppedImages(images,result.files);setImages(appended.files);const rejected=[...result.rejected,...appended.rejected];if(rejected.length)setError(rejected.join(' '));}
+      else {const added=await selectImages();if(added)setImages(previous=>addImages(previous,added));}
+    }
     catch (cause) { setError(cause instanceof Error ? cause.message : nativeError(cause)); }
     finally { operation.current = false; setAdding(false); }
   }
   async function startImagePdf() {
-    if (operation.current || busy || adding || !images.length || probing || engineLoading || selection.selecting) return;
+    if (operation.current || busy || adding || !images.length || pageSizeError || probing || engineLoading || selection.selecting) return;
     operation.current = true; setStarting(true); setError(null); dispatch({ type: 'lock', locked: true });
-    try { const next = await startImagesPdf(images.map(f => f.path), pageSize); setJob(previous => mergeJob(previous, next)); }
+    try { const next = await startImagesPdf(images.map(f => f.path), sizePayload(pageSize,customSize)); setJob(previous => mergeJob(previous, next)); }
     catch (cause) { setError(nativeError(cause)); }
     finally { operation.current = false; setStarting(false); }
   }
@@ -120,7 +126,7 @@ export function useConversion(selection: SelectionState, dispatch: Dispatch<Sele
     catch (cause) { setError(nativeError(cause)); }
     finally { setCancelling(false); }
   }
-  return { imagePreviews: imagePreviews.states, failImagePreview: imagePreviews.fail, engine, engineLoading, media, image, pdf, preview, pdfPages, setPdfPages, rangeError, outputIsFolder: pdfInput && (selection.output === 'png' || selection.output === 'jpg'), images, pageSize, setPageSize, adding, chooseImages, startImagePdf,
+  return { customSize,setCustomSize,pageSizeError,selectionError:setError, imagePreviews: imagePreviews.states, failImagePreview: imagePreviews.fail, engine, engineLoading, media, image, pdf, preview, pdfPages, setPdfPages, rangeError, outputIsFolder: pdfInput && (selection.output === 'png' || selection.output === 'jpg'), images, pageSize, setPageSize, adding, chooseImages, startImagePdf,
     removeImage: (index: number) => { if (!busy && !adding) setImages(previous => previous.filter((_,i) => i !== index)); },
     moveImage: (index: number, direction: -1 | 1) => { if (!busy && !adding) setImages(previous => moveImage(previous,index,direction)); },
     probing, probeError, error, job, busy, starting, cancelling, formats, availability, canConvert, configure, start, cancel };

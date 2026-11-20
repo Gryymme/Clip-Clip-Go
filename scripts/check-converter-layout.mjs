@@ -13,16 +13,21 @@ try {
  const {initialSelection}=await server.ssrLoadModule('/src/converter/selection.ts');
  const noop=()=>{};
  const base={engine:null,engineLoading:false,media:null,image:null,pdf:null,pdfPages:'',rangeError:null,outputIsFolder:false,images:[],pageSize:'a4',adding:false,probing:false,probeError:null,error:null,job:null,busy:false,starting:false,cancelling:false,formats:[],availability:null,canConvert:false,preview:{state:{status:'idle',path:''},failed:noop}};
- for(const key of ['chooseImages','setPageSize','moveImage','removeImage','startImagePdf','configure','start','cancel','setPdfPages'])base[key]=noop;
+ for(const key of ['chooseImages','setPageSize','moveImage','removeImage','startImagePdf','configure','start','cancel','setPdfPages','setCustomSize','selectionError'])base[key]=noop;
  const files=[
   {name:'2026 Annual Review — FINAL (revised after board approval) v12.png',path:'C:\\Projects\\Annual review\\Approved assets\\2026 Annual Review — FINAL (revised after board approval) v12.png',sizeBytes:'134217728'},
   {name:'IMG_20261120_183022_HDR_portrait_edited_edited.PNG',path:'C:\\Images\\Campaign\\Source images\\IMG_20261120_183022_HDR_portrait_edited_edited.PNG',sizeBytes:'1'},
   {name:'最終版_承認済み_販売報告書.TIFF',path:'C:\\Images\\International\\最終版_承認済み_販売報告書.TIFF',sizeBytes:'0'},
  ];
+ const {initialSize}=await server.ssrLoadModule('/src/converter/pageSize.ts');
+ base.customSize=initialSize;base.pageSizeError=null;
  const fixtures=[];
  function view(page,node){return render(h(Shell,{activePage:page,onNavigate:noop},node));}
  for(const [name,images]of [['Images empty',[]],['Images one',[files[0]]],['Images worst case',files],['Images 100',Array.from({length:100},(_,i)=>({...files[i%3],path:files[i%3].path+`-${i}`}))]]){
-  const html=view('Images to PDF',h(ImagesToPdf,{conversion:{...base,images,pageSize:'image'},selecting:false}));assert.equal((html.match(/class="file-summary"/g)??[]).length,images.length);assert.ok(html.includes('Image-sized'));fixtures.push([name,html]);
+  const html=view('Images to PDF',h(ImagesToPdf,{conversion:{...base,images,pageSize:'image'},selecting:false}));assert.equal((html.match(/class="file-summary(?: file-empty)?"/g)??[]).length,images.length+1);assert.ok(html.includes('Image sized'));fixtures.push([name,html]);
+ }
+ for(const [name,extra] of [['Custom pixel page',{customSize:{...initialSize,unit:'px'},pageSizeError:null}],['Invalid custom page',{customSize:{...initialSize,width:NaN,widthDraft:''},pageSizeError:'Page dimensions must be finite.'}]]){
+ const html=view('Images to PDF',h(ImagesToPdf,{conversion:{...base,...extra,images:files,pageSize:'custom'},selecting:false}));assert.ok(html.includes('custom-width'));assert.ok(html.includes('custom-height'));assert.ok(html.includes('custom-unit'));if(name==='Custom pixel page')assert.ok(html.includes('custom-dpi'));fixtures.push([name,html]);
  }
  for(const [name,format,category,extra]of [
   ['Image loading','png','image',{preview:{state:{status:'loading',path:files[0].path},failed:noop}}],

@@ -3,6 +3,24 @@
   "identifier": "main",
   "description": "Allow the main local window to select files, inspect engines/media and manage one typed conversion. No shell or general filesystem access.",
   "local": true,
-  "windows": ["main"],
-  "permissions": ["allow-generate-preview","allow-cancel-preview","allow-select-media-file","allow-select-images","allow-probe-pdf","allow-start-images-pdf","allow-configure-engines","allow-probe-media","allow-probe-image","allow-start-conversion","allow-get-conversion-status","allow-cancel-conversion"]
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "allow-generate-preview",
+    "allow-cancel-preview",
+    "allow-select-media-file",
+    "allow-select-images",
+    "allow-probe-pdf",
+    "allow-start-images-pdf",
+    "allow-configure-engines",
+    "allow-probe-media",
+    "allow-probe-image",
+    "allow-start-conversion",
+    "allow-get-conversion-status",
+    "allow-cancel-conversion",
+    "allow-claim-drop",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten"
+  ]
 }
