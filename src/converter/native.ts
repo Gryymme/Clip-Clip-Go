@@ -1,7 +1,7 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { inputExtensions } from './formats';
 import type { NativeFile } from './selection';
-import type { EngineReport, MediaInfo, ImageInfo, ConversionFormat, ConversionJob } from './conversion';
+import type { EngineReport, MediaInfo, ImageInfo, PdfInfo, ConversionFormat, ConversionJob } from './conversion';
 
 export async function selectMediaFile(): Promise<NativeFile | null> {
   if (!isTauri()) throw { code: 'desktopRequired' };
@@ -18,8 +18,11 @@ export async function probeMedia(inputPath: string): Promise<MediaInfo> {
 export async function probeImage(inputPath: string): Promise<ImageInfo> {
   desktop(); return invoke('probe_image', { inputPath });
 }
-export async function startConversion(inputPath: string, format: ConversionFormat): Promise<ConversionJob> {
-  desktop(); return invoke('start_conversion', { inputPath, format });
+export async function probePdf(inputPath: string): Promise<PdfInfo> { desktop(); return invoke('probe_pdf', { inputPath }); }
+export async function selectImages(): Promise<NativeFile[] | null> { desktop(); return invoke('select_images'); }
+export async function startImagesPdf(inputPaths: string[], pageSize: 'a4' | 'image'): Promise<ConversionJob> { desktop(); return invoke('start_images_pdf', { inputPaths, pageSize }); }
+export async function startConversion(inputPath: string, format: ConversionFormat, pages = ''): Promise<ConversionJob> {
+  desktop(); return invoke('start_conversion', { inputPath, format, pdfOptions: { pages } });
 }
 export async function conversionStatus(): Promise<ConversionJob | null> { desktop(); return invoke('get_conversion_status'); }
 export async function cancelConversion(id: number): Promise<void> { desktop(); return invoke('cancel_conversion', { id }); }

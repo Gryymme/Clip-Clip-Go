@@ -37,6 +37,49 @@ fn file_metadata(path: &Path) -> Result<MediaFile, SelectionError> {
     })
 }
 
+#[tauri::command]
+pub async fn select_images(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, crate::conversion::Runtime>,
+) -> Result<Option<Vec<MediaFile>>, SelectionError> {
+    let core = state.core.clone();
+    if core.busy() {
+        return Err(SelectionError::Busy);
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let chosen = window
+            .dialog()
+            .file()
+            .set_parent(&window)
+            .set_title("Add still images to PDF (maximum 100)")
+            .add_filter(
+                "Still images",
+                &["jpg", "jpeg", "png", "webp", "bmp", "tif", "tiff"],
+            )
+            .blocking_pick_files();
+        chosen
+            .map(|files| {
+                if files.len() > 100 {
+                    return Err(SelectionError::MetadataError);
+                }
+                files
+                    .into_iter()
+                    .map(|file| {
+                        let path = file
+                            .into_path()
+                            .map_err(|_| SelectionError::MetadataError)?;
+                        let info = file_metadata(&path)?;
+                        core.remember(&path);
+                        Ok(info)
+                    })
+                    .collect()
+            })
+            .transpose()
+    })
+    .await
+    .map_err(|_| SelectionError::MetadataError)?
+}
+
 // No caller-supplied file path: stat only the file chosen in this native dialog.
 #[tauri::command]
 pub async fn select_media_file(

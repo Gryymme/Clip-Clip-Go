@@ -42,6 +42,8 @@ pub struct Job {
     pub duration: Option<f64>,
     pub seconds: f64,
     pub percent: Option<f64>,
+    pub pages_done: Option<u16>,
+    pub pages_total: Option<u16>,
     pub message: String,
 }
 #[derive(Default)]
@@ -225,13 +227,29 @@ pub async fn probe_image(
     })?
 }
 
+#[tauri::command]
+pub async fn probe_pdf(
+    state: tauri::State<'_, Runtime>,
+    input_path: String,
+) -> Result<crate::pdf::PdfInfo> {
+    let core = state.core.clone();
+    let path = core.authorize(&input_path)?;
+    if !crate::pdf::is_input(&path) {
+        return Err("Choose a PDF file.".into());
+    }
+    let operation = core.reserve()?;
+    tauri::async_runtime::spawn_blocking(move || crate::pdf::inspect(&path, &operation.control))
+        .await
+        .map_err(|_| "PDF inspection failed.")?
+}
+
 pub fn command_args(
     input: &Path,
     temp: &Path,
     format: OutputFormat,
     media: &MediaInfo,
 ) -> Result<Vec<String>> {
-    if format.image() {
+    if format.image() || format.text() || format == OutputFormat::Pdf {
         return Err("Image formats cannot use the audio/video runner.".into());
     }
     let mut args: Vec<String> = [
@@ -535,17 +553,29 @@ pub fn start_conversion(
     state: tauri::State<'_, Runtime>,
     input_path: String,
     format: OutputFormat,
+    pdf_options: Option<crate::pdf::PdfOptions>,
 ) -> Result<Job> {
     let core = state.core.clone();
     let input = core.authorize(&input_path)?;
     let image_input = crate::images::is_image_input(&input);
-    if image_input != format.image() {
+    let pdf_input = crate::pdf::is_input(&input);
+    let pdf_route = crate::pdf::route(&input, format);
+    let text_input = crate::text::input_kind(&input).is_some();
+    if (text_input && !crate::text::route(&input, format) && !pdf_route)
+        || (pdf_input && !pdf_route)
+    {
+        return Err("Choose a supported, different text/PDF output format.".into());
+    }
+    if !text_input
+        && !pdf_input
+        && (image_input != format.image() || format.text() || format == OutputFormat::Pdf)
+    {
         return Err("Choose an output appropriate for the selected input category.".into());
     }
-    if !image_input {
+    if !image_input && !text_input && !pdf_input {
         engine::is_video_input(&input)?;
     }
-    let engines = if image_input {
+    let engines = if image_input || text_input || pdf_input {
         None
     } else {
         Some(core.engines()?)
@@ -562,7 +592,13 @@ pub fn start_conversion(
         duration: None,
         seconds: 0.0,
         percent: None,
-        message: if image_input {
+        pages_done: None,
+        pages_total: None,
+        message: if pdf_input {
+            "Validating the PDF…".into()
+        } else if text_input {
+            "Parsing and preparing the text document…".into()
+        } else if image_input {
             "Decoding and validating the selected image…".into()
         } else {
             "Validating the selected media…".into()
@@ -571,6 +607,11 @@ pub fn start_conversion(
     core.inner.lock().unwrap().job = Some(job.clone());
     std::thread::spawn(move || {
         let result = (|| -> Result<PathBuf> {
+            let text = if text_input && !pdf_route {
+                Some(crate::text::render(&input, format, &operation.control)?)
+            } else {
+                None
+            };
             let image = if image_input {
                 Some(crate::images::decode(&input, &operation.control)?)
             } else {
@@ -592,6 +633,9 @@ pub fn start_conversion(
             } else {
                 None
             };
+            if pdf_input {
+                crate::pdf::inspect(&input, &operation.control)?;
+            }
             operation.control.check()?;
             core.update(id, |j| {
                 j.phase = JobPhase::ChoosingDestination;
@@ -599,24 +643,108 @@ pub fn start_conversion(
                 j.message = "Choose a new destination filename in the Save dialog.".into();
             });
             let stem = input.file_stem().unwrap_or_default().to_string_lossy();
-            let chosen = window
+            let folder_output = pdf_input && format.image();
+            let mut dialog = window
                 .dialog()
                 .file()
                 .set_parent(&window)
-                .set_title("Save converted file without overwriting")
-                .set_file_name(format!("{stem}_converted.{}", format.extension()))
-                .add_filter(format.extension().to_uppercase(), &[format.extension()])
-                .blocking_save_file()
-                .ok_or(CANCELLED)?;
+                .set_title(if folder_output {
+                    "Name a NEW output folder for PDF pages"
+                } else {
+                    "Save converted file without overwriting"
+                })
+                .set_file_name(if folder_output {
+                    format!("{stem}-pages")
+                } else {
+                    format!("{stem}_converted.{}", format.extension())
+                });
+            if !folder_output {
+                dialog =
+                    dialog.add_filter(format.extension().to_uppercase(), &[format.extension()]);
+            }
+            let chosen = dialog.blocking_save_file().ok_or(CANCELLED)?;
             let chosen = chosen
                 .into_path()
                 .map_err(|_| "Could not access that destination.".to_string())?;
-            let destination = destination_path(&input, &chosen, format)?;
+            let destination = if folder_output {
+                chosen.clone()
+            } else {
+                destination_path(&input, &chosen, format)?
+            };
             core.update(id, |j| {
                 j.phase = JobPhase::Running;
                 j.destination = Some(destination.to_string_lossy().into_owned());
                 j.message = "Converting…".into();
             });
+            if pdf_route {
+                let mut page_progress = |done: u16, total: u16| {
+                    core.update(id, |j| {
+                        if j.phase != JobPhase::Cancelling {
+                            j.pages_done = Some(done);
+                            j.pages_total = Some(total);
+                            j.percent = Some(f64::from(done) / f64::from(total) * 100.0);
+                            j.message = format!(
+                                "Processed page {done} of {total}. Validating before publication…"
+                            );
+                        }
+                    });
+                };
+                if pdf_input && format.image() {
+                    return crate::pdf::render_pages(
+                        &input,
+                        &destination,
+                        format,
+                        &pdf_options.unwrap_or_default(),
+                        &operation.control,
+                        &mut page_progress,
+                    );
+                }
+                if format == OutputFormat::Pdf {
+                    return crate::pdf::generate(
+                        &input,
+                        &destination,
+                        &operation.control,
+                        &mut page_progress,
+                    );
+                }
+                let extracted =
+                    crate::pdf::extract(&input, format, &operation.control, &mut page_progress)?;
+                return crate::text::publish(
+                    extracted,
+                    &input,
+                    &destination,
+                    format,
+                    &operation.control,
+                    |_| {},
+                );
+            }
+            if let Some(text) = text {
+                return crate::text::publish(
+                    text,
+                    &input,
+                    &destination,
+                    format,
+                    &operation.control,
+                    |stage| {
+                        core.update(id, |j| {
+                            if j.phase == JobPhase::Cancelling {
+                                return;
+                            }
+                            j.phase = if stage == "writing" {
+                                JobPhase::Running
+                            } else {
+                                JobPhase::Verifying
+                            };
+                            j.message = match stage {
+                                "writing" => "Writing the converted document…",
+                                "verifying" => "Validating the UTF-8 output…",
+                                _ => "Publishing the validated document…",
+                            }
+                            .into();
+                        })
+                    },
+                );
+            }
             if let Some(image) = image {
                 return crate::images::convert_to(
                     image,
@@ -684,9 +812,113 @@ pub fn start_conversion(
         core.update(id, |j| match result {
             Ok(path) => {
                 j.phase = JobPhase::Succeeded;
-                j.percent = if image_input { None } else { Some(100.0) };
+                j.percent = if image_input || text_input || pdf_input {
+                    None
+                } else {
+                    Some(100.0)
+                };
                 j.destination = Some(path.to_string_lossy().into_owned());
                 j.message = "Conversion completed and output validated.".into();
+            }
+            Err(message) => {
+                j.phase = if message == CANCELLED {
+                    JobPhase::Cancelled
+                } else {
+                    JobPhase::Failed
+                };
+                j.message = message;
+            }
+        });
+    });
+    Ok(job)
+}
+
+#[tauri::command]
+pub fn start_images_pdf(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, Runtime>,
+    input_paths: Vec<String>,
+    page_size: crate::pdf::ImagePageSize,
+) -> Result<Job> {
+    if input_paths.is_empty() || input_paths.len() > 100 {
+        return Err("Choose 1–100 still images.".into());
+    }
+    let core = state.core.clone();
+    let inputs = input_paths
+        .iter()
+        .map(|p| {
+            let path = core.authorize(p)?;
+            if !crate::images::is_image_input(&path) {
+                return Err(
+                    "Images to PDF accepts JPEG, PNG, WebP, BMP and TIFF still images only.".into(),
+                );
+            }
+            Ok(path)
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let operation = core.reserve()?;
+    let id = core.sequence.fetch_add(1, Ordering::SeqCst) + 1;
+    let job = Job {
+        id,
+        revision: 0,
+        phase: JobPhase::ChoosingDestination,
+        input_path: format!("{} images (visible list order)", inputs.len()),
+        destination: None,
+        format: OutputFormat::Pdf,
+        duration: None,
+        seconds: 0.0,
+        percent: None,
+        pages_done: Some(0),
+        pages_total: Some(inputs.len() as u16),
+        message: "Choose a new PDF filename in the Save dialog.".into(),
+    };
+    core.inner.lock().unwrap().job = Some(job.clone());
+    std::thread::spawn(move || {
+        let result = (|| {
+            operation.control.check()?;
+            let chosen = window
+                .dialog()
+                .file()
+                .set_parent(&window)
+                .set_title("Save images as one PDF without overwriting")
+                .set_file_name("images.pdf")
+                .add_filter("PDF", &["pdf"])
+                .blocking_save_file()
+                .ok_or(CANCELLED)?
+                .into_path()
+                .map_err(|_| "Could not access that destination.")?;
+            let destination = destination_path(&inputs[0], &chosen, OutputFormat::Pdf)?;
+            core.update(id, |j| {
+                j.phase = JobPhase::Running;
+                j.destination = Some(destination.to_string_lossy().into_owned());
+                j.message = "Validating and assembling image pages…".into();
+            });
+            crate::pdf::images_to_pdf(
+                &inputs,
+                &destination,
+                page_size,
+                &operation.control,
+                &mut |done, total| {
+                    core.update(id, |j| {
+                        if j.phase != JobPhase::Cancelling {
+                            j.pages_done = Some(done);
+                            j.pages_total = Some(total);
+                            j.percent = Some(f64::from(done) / f64::from(total) * 100.0);
+                            j.message = format!(
+                                "Processed page {done} of {total}. Validating before publication…"
+                            );
+                        }
+                    })
+                },
+            )
+        })();
+        drop(operation);
+        core.update(id, |j| match result {
+            Ok(path) => {
+                j.phase = JobPhase::Succeeded;
+                j.destination = Some(path.to_string_lossy().into_owned());
+                j.percent = Some(100.0);
+                j.message = "PDF completed and page count validated.".into();
             }
             Err(message) => {
                 j.phase = if message == CANCELLED {
@@ -715,8 +947,9 @@ pub fn cancel_conversion(state: tauri::State<'_, Runtime>, id: u64) -> Result<()
         }
         job.phase = JobPhase::Cancelling;
         job.revision += 1;
-        job.message = if job.format.image() {
-            "Cancelling… Waiting for the current image-processing step to finish, then removing its temporary output.".into()
+        job.message = if job.format.image() || job.format.text() || job.format == OutputFormat::Pdf
+        {
+            "Cancelling… Waiting for the current processing step to finish, then removing its temporary output.".into()
         } else {
             "Cancelling and cleaning up the temporary output…".into()
         };

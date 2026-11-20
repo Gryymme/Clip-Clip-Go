@@ -44,7 +44,8 @@ export function selectionReducer(state: SelectionState, action: SelectionAction)
       }
       const input = identifyFile(action.file.name);
       if (!input) {
-        return { ...state, selecting: false, error: `Unsupported file extension. Choose one of: ${supportedInputLabel}.` };
+        const office = /\.(docx?|xlsx?|pptx?|odt|ods|odp|rtf)$/i.test(action.file.name);
+        return { ...state, selecting: false, error: office ? 'Microsoft Office and OpenDocument files are not supported. Choose TXT, Markdown, HTML or PDF instead.' : `Unsupported file extension. Choose one of: ${supportedInputLabel}.` };
       }
       return {
         file: { ...action.file, ...input },

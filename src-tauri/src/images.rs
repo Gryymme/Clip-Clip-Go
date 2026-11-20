@@ -118,7 +118,7 @@ fn u64_at(bytes: [u8; 8], little: bool) -> u64 {
 
 // Bounded structural checks supplement the image decoder, which otherwise reads
 // only the default frame/page. They scan chunk headers, not entire pixel payloads.
-fn single_image(
+pub(crate) fn single_image(
     reader: &mut (impl Read + Seek),
     format: ImageFormat,
     length: u64,

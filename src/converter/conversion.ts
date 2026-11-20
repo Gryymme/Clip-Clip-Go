@@ -5,7 +5,10 @@ import type { SelectedFile } from './selection.ts';
 export const engineFormats = ['mp4', 'mkv', 'webm', 'mp3', 'wav', 'flac', 'm4a'] as const;
 export type EngineFormat = (typeof engineFormats)[number];
 export type ImageFormat = (typeof imageOutputs)[number];
-export type ConversionFormat = EngineFormat | ImageFormat;
+export type TextFormat = 'md' | 'html' | 'txt';
+export type ConversionFormat = EngineFormat | ImageFormat | TextFormat | 'pdf';
+export interface PdfInfo { pages: number; hasText: boolean }
+export function isTextFormat(format: string): format is TextFormat { return ['md','html','txt'].includes(format); }
 export interface ImageInfo {
   width: number; height: number; format: ImageFormat; hasAlpha: boolean; orientationApplied: boolean;
 }
@@ -22,6 +25,7 @@ export type JobPhase = 'validating' | 'choosingDestination' | 'running' | 'verif
 export interface ConversionJob {
   id: number; revision: number; phase: JobPhase; inputPath: string; destination: string | null;
   format: ConversionFormat; duration: number | null; seconds: number; percent: number | null; message: string;
+  pagesDone?: number | null; pagesTotal?: number | null;
 }
 export function isMediaFile(file: SelectedFile | null): boolean { return file?.category === 'audio' || file?.category === 'video'; }
 export function isEngineFormat(format: OutputFormat | ''): format is EngineFormat { return (engineFormats as readonly string[]).includes(format); }

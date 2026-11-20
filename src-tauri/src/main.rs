@@ -7,7 +7,9 @@ mod engine;
 mod engine_integrity;
 mod images;
 mod media;
+mod pdf;
 mod process;
+mod text;
 
 fn main() {
     tauri::Builder::default()
@@ -18,6 +20,9 @@ fn main() {
             conversion::configure_engines,
             conversion::probe_media,
             conversion::probe_image,
+            conversion::probe_pdf,
+            media::select_images,
+            conversion::start_images_pdf,
             conversion::start_conversion,
             conversion::get_conversion_status,
             conversion::cancel_conversion

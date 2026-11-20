@@ -1,5 +1,6 @@
+import { isTextInput } from './formats';
 import type { ConversionController } from './useConversion';
-import { displayDuration, isMediaFile, isImageFile, isImageFormat, jobIsBusy } from './conversion';
+import { displayDuration, isMediaFile, isImageFile, isImageFormat, isTextFormat, jobIsBusy } from './conversion';
 import type { SelectedFile } from './selection';
 
 export function EngineSetup({ controller: c, selecting }: { controller: ConversionController; selecting: boolean }) {
@@ -20,21 +21,23 @@ export function EngineSetup({ controller: c, selecting }: { controller: Conversi
 export function ConversionActions({ controller: c, file }: { controller: ConversionController; file: SelectedFile | null }) {
   const mediaInput = isMediaFile(file);
   const imageInput = isImageFile(file);
-  const imageJob = c.job !== null && isImageFormat(c.job.format);
-  const reason = !file ? 'Select an audio, video or image file to convert.' : !mediaInput && !imageInput ? 'Document conversion is not available yet.'
+  const textInput = file !== null && isTextInput(file.format);
+  const imagesMode = c.mode === 'imagesPdf';
+  const imageJob = c.job !== null && (isImageFormat(c.job.format) || isTextFormat(c.job.format) || c.job.format === 'pdf' || Boolean(c.job.pagesTotal));
+  const reason = imagesMode ? 'Save one PDF in the visible page order. Originals and existing destinations are preserved.' : !file ? 'Select an audio, video, image or supported document file to convert.' : textInput || file.format === 'pdf' ? 'Choose a supported output and a new destination. Existing files and folders are preserved.' : !mediaInput && !imageInput ? 'Choose a supported input file.'
     : imageInput ? c.probing ? 'Decoding and checking the image…' : c.probeError ? 'Select another image to continue.' : !c.image ? 'Waiting for image validation…' : 'Choose a new destination filename. The original and existing files will be preserved.'
     : c.engineLoading ? 'Checking the conversion engines…' : !c.engine?.ready ? 'Restore the bundled engines to enable audio/video conversion.'
     : c.probing ? 'Inspecting media with FFprobe…' : c.probeError ? 'Select another file to continue.' : c.availability?.reason ? 'Choose an available output format.' : 'Choose a destination filename. The original and existing files will be preserved.';
   return <>
-    {mediaInput && c.media && <p className="field-help media-summary">
+    {!imagesMode && mediaInput && c.media && <p className="field-help media-summary">
       Media checked with FFprobe. {c.media.video ? `Video: ${c.media.video.codec}. ` : 'No actual video stream. '}
       {c.media.audio ? `Audio: ${c.media.audio.codec}. ` : 'No audio stream. '}
       Duration: {displayDuration(c.media.duration)}.
     </p>}
     {c.error && <p className="selection-error" role="alert">{c.error}</p>}
-    {(mediaInput || imageInput) && c.probeError && <p className="selection-error" role="alert">{c.probeError}</p>}
+    {!imagesMode && c.probeError && <p className="selection-error" role="alert">{c.probeError}</p>}
     <div className="conversion-action">
-      <button className="button button-primary" type="button" disabled={!c.canConvert} aria-describedby="conversion-limitation output-availability" onClick={() => void c.start()}>{c.starting ? 'Preparing…' : 'Convert'}</button>
+      <button className="button button-primary" type="button" disabled={imagesMode ? !c.images.length || c.busy || c.adding || c.engineLoading || c.probing : !c.canConvert} aria-describedby={imagesMode ? 'conversion-limitation' : 'conversion-limitation output-availability'} onClick={() => void (imagesMode ? c.startImagePdf() : c.start())}>{c.starting ? 'Preparing…' : imagesMode ? 'Create PDF' : 'Convert'}</button>
       <p className="field-help" id="conversion-limitation">{c.busy ? 'One conversion at a time. File and format controls are locked until this job finishes.' : reason}</p>
     </div>
     {c.job && <section className="conversion-job" aria-labelledby="job-heading">
@@ -43,6 +46,7 @@ export function ConversionActions({ controller: c, file }: { controller: Convers
       {(jobIsBusy(c.job) || c.job.phase === 'succeeded') && <>
         <progress aria-label="Conversion progress" max={100} value={c.job.phase === 'succeeded' ? 100 : c.job.phase === 'running' ? c.job.percent ?? undefined : undefined} />
         {!imageJob && <p className="field-help numeric-value">{c.job.phase === 'running' ? `${c.job.percent === null ? 'Duration unavailable · ' : `${Math.floor(c.job.percent)}% · `}${displayDuration(c.job.seconds)} processed` : c.job.phase === 'succeeded' ? '100% · Output validated' : 'Waiting for the current native operation…'}</p>}
+        {c.job.pagesTotal != null && <p className="field-help numeric-value">{c.job.pagesDone ?? 0} of {c.job.pagesTotal} pages processed{c.job.phase === 'succeeded' ? ' · Output validated' : ''}</p>}
       </>}
       <dl className="file-details">
         <div><dt>Input</dt><dd className="file-path" dir="auto">{c.job.inputPath}</dd></div>

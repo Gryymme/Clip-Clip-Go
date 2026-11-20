@@ -1,118 +1,105 @@
 # Clip-Clip-Go
 
-Clip-Clip-Go is a Windows desktop application being built to combine authorized media downloading with local conversion of video, audio, image, and document files into appropriate formats through a user-friendly interface.
+Clip-Clip-Go is a Windows desktop application combining local media, image and text/PDF conversion with a user-friendly interface. Authorized media downloading is planned; Downloader, Queue, History and Settings remain placeholders.
 
-The working foundation uses Tauri 2, React, TypeScript, Vite, npm, and plain CSS. It provides a dark desktop shell with keyboard focus styles and navigation between Downloader, Converter, Queue, History, and Settings.
-
-## Converter
-
-The Converter selects one local file through a native Windows file dialog and displays its name, full path, exact size, and preliminary video, audio, image, or document category. File size and path come from native filesystem metadata; conversion providers inspect content separately. Replace and remove controls are available; cancellation or an unsuccessful replacement preserves the previous selection.
-
-Single-file **audio/video conversion is implemented**, using bundled FFmpeg and FFprobe executables. Users do not need to install engines, configure an engine folder, or change PATH. Available output choices depend on the bundled encoders and the actual media streams. Single-image conversion is also implemented with a compiled-in Rust provider; it needs no external tools. Document selection remains available, with conversion disabled.
+## Implemented conversions
 
 | Input | Outputs |
 | --- | --- |
 | MP4, MKV, WebM, MOV | MP4, MKV, WebM; audio extraction to MP3, WAV, FLAC, M4A |
 | MP3, WAV, FLAC, M4A, OGG | MP3, WAV, FLAC, M4A |
-| JPG/JPEG, PNG, WebP, BMP, TIFF/TIF (single still image) | JPG, PNG, WebP, BMP, TIFF |
-| DOC, DOCX, ODT, RTF | Planned only: PDF, DOCX, ODT, TXT |
-| TXT | Planned only: PDF, DOCX, ODT |
-| PPT, PPTX, ODP | Planned only: PDF, PPTX, ODP |
-| XLS, XLSX, ODS | Planned only: PDF, XLSX, ODS, CSV |
-| PDF | Planned only: TXT, PNG, JPG |
+| JPEG/JPG, PNG, WebP, BMP, TIFF/TIF (one still image) | JPG, PNG, WebP, BMP, TIFF |
+| TXT | Markdown, HTML, PDF |
+| Markdown (.md/.markdown) | TXT, HTML, PDF |
+| HTML (.html/.htm) | TXT, Markdown, PDF |
+| PDF | TXT, Markdown, HTML, PNG page images, JPEG page images |
+| Multiple supported still images, in Images to PDF mode | One PDF in the visible list order |
 
-Extension matching is case-insensitive; JPEG/JPG and TIF/TIFF use the same routes. Output choices are specific to the input format. PDF-to-text will initially require a text-based PDF; scanned documents need OCR, which is not offered. PDF-to-image is planned to produce one image per page, and spreadsheet-to-CSV may export only one sheet. PDF-to-Word and unrelated cross-category routes are not offered.
+Extension matching is case-insensitive. Markdown output uses `.md`, HTML uses `.html`, and JPEG uses `.jpg`. Identical-format document conversions are not offered. Microsoft Office and OpenDocument formats, including DOC/DOCX, RTF, XLS/XLSX, PPT/PPTX, ODT, ODS and ODP, are unsupported. **LibreOffice and optional Office installation are permanently cancelled.** The short historical decision is in [docs/office-runtime.md](docs/office-runtime.md).
 
-Compatible output choices are retained when replacing a file. Selection and the active job survive page navigation during the current session. There is no saved configuration or job database.
+Select files with native dialogs. Metadata is obtained natively without loading files into the frontend. Content is checked by the applicable provider. Selection, output choices, image order, page settings and the current job survive navigation during the session. There is one active conversion across all providers. There is no saved configuration, queue, history or database.
 
-## Bundled engines
+Originals are preserved. The native Save dialog chooses a new destination; output extensions are enforced. Existing/identical destinations are rejected, including publication races. Validated output is staged beside its destination and published without overwriting. Cancellation takes effect at safe processing boundaries; an encoding/rendering operation may finish before cancellation is observed. No simulated jobs, progress or success are shown.
 
-Windows x64 builds include FFmpeg and FFprobe **9.0.2 essentials** from [Gyan Doshi](https://www.gyan.dev/ffmpeg/builds/), a provider linked by [ffmpeg.org](https://ffmpeg.org/download.html#build-windows). They are static software-codec builds; Windows system/UCRT components and WebView2 remain platform requirements. The app resolves the exact binaries beside its executable, validates their SHA-256 hashes, versions and encoders, and never falls back to PATH or downloads engines at runtime. Missing or damaged engines produce a repair/reinstall message. Version details are available in Converter.
+## Text and PDF
 
-The archive URL, SHA-256, executable hashes, target, exact compiler/configuration and source reference are pinned in [the engine manifest](scripts/ffmpeg-manifest.json). Full reports and license texts are in [third-party/ffmpeg](third-party/ffmpeg/NOTICE.md) and installed under `notices/ffmpeg/`.
+Text inputs must be UTF-8. Text outputs are UTF-8 with normalized LF line endings. TXT is treated literally, with Markdown/HTML syntax escaped. Native parsing preserves headings, paragraphs, lists, links, fenced code and basic tables where the output permits; exact round trips are not promised. Headerless HTML tables use their first row as a Markdown header; merged/nested table layout is not preserved. TXT keeps readable text and image alt text rather than rich layout or image pixels.
 
-**Public redistribution is not cleared yet.** These executables report GPLv3-or-later. Complete corresponding source for this exact combined static build, dependency revisions/build scripts and a complete third-party notice audit still need to be assembled and supplied using an applicable GPLv3 distribution method. Attribution and a generic source link alone are insufficient. See [remaining obligations](third-party/ffmpeg/NOTICE.md). The application's license has not been changed.
+HTML is parsed as inert data: JavaScript is never executed, scripts/styles/head metadata are ignored, and active objects are rejected. CSS, background images and interactive forms are outside the supported subset. No remote images, stylesheets or links are automatically fetched. Markdown raw HTML is shown literally. Supported image references are relative local raster files canonicalized inside the source folder, or validated embedded PNG data. Missing, unsupported, remote/UNC or escaping image references fail explicitly. HTML output is self-contained with embedded PNGs and a restrictive CSP; Markdown can contain PNG data URLs, which some viewers do not display. Absolute HTTP(S)/mailto links and fragments remain inert; unsafe and relative hyperlinks are rejected.
 
-| Output | Fixed encoding preset / required encoders |
-| --- | --- |
-| MP4, MKV | H.264 (`libx264`, medium, CRF 23, 8-bit YUV 4:2:0); optional AAC audio (`aac`, 192 kb/s) |
-| WebM | VP9 (`libvpx-vp9`, CRF 32); optional Opus audio (`libopus`, 128 kb/s) |
-| MP3 | `libmp3lame`, quality 2, stereo |
-| WAV | `pcm_s16le`, 16-bit PCM |
-| FLAC | `flac`, compression level 5 |
-| M4A | `aac`, 192 kb/s |
+### Generate PDF
 
-## Converting one image
+TXT, Markdown and HTML produce paginated A4 PDFs with wrapping and an **embedded Noto Sans Regular font**. Headings use larger text; lists, code, links (including their visible URLs), basic table rows and supported images are reflowed. This is a readable document layout, not HTML/CSS printing or preservation of an original page design. Images are flattened onto white and encoded as JPEG at quality 90; PDFs are not claimed lossless.
 
-Select a JPEG/JPG, PNG, WebP, BMP or TIFF/TIF file. The native provider decodes its content (the extension alone is not validation) and displays the detected format and dimensions. Choose an image output and use the same **Convert** action and native Save dialog. Images use the existing single-job lifecycle, navigation retention and output protection; audio/video and image jobs cannot run together. Image conversion works even when the FFmpeg sidecars are unavailable.
+Generation is tested with precomposed Latin/diacritics, Greek and Cyrillic. CJK, Arabic, Hebrew, Indic scripts, emoji, combining sequences and glyphs absent from the font are unsupported in this milestone. Unsupported characters cause a readable error identifying the code point instead of a silently blank glyph. Use precomposed characters where possible. Extraction/rendering of an existing PDF has different font coverage and may use its embedded fonts or platform substitutions.
 
-Image support uses Rust `image = 0.25.10`, with only JPEG, PNG, WebP, BMP and TIFF codec features enabled and default features disabled. It compiles into the app: users install no image tools and download no image engines. JPEG output uses quality 90; PNG uses default compression/adaptive filtering; WebP uses lossless encoding of normalized pixels; BMP and TIFF use the library's fixed defaults. Aliases and case are normalized; output extensions are enforced as `.jpg`, `.png`, `.webp`, `.bmp` or `.tiff`.
+### Extract PDF text
 
-Dimensions are preserved after applying EXIF orientation to the pixels; a 90°/270° orientation swaps width and height. PNG, WebP, BMP (32-bit V4) and TIFF preserve transparency. JPEG cannot preserve alpha: transparent pixels are composited onto white, with a contextual explanation before conversion. Some other applications may not display alpha in BMP files correctly.
+PDF → TXT/Markdown/HTML is **reconstructed content**, based on PDFium's text order. Original styling, exact tables, semantic heading levels and perfect multicolumn reading order are not recovered. Only extracted visible text is retained; annotation/link targets are not separately reconstructed. TXT separates pages with form feeds; Markdown uses page headings and escaped text; HTML uses page sections with escaped preformatted text.
 
-Outputs are normalized to 8-bit RGB/RGBA channels. Source EXIF (including GPS), ICC profiles, textual metadata and other source metadata are not copied. Orientation is applied once rather than retained as an orientation tag. No ICC profile transformation or color-managed matching is performed; wide-gamut/profile-dependent images may change appearance. Higher bit-depth images lose precision, and JPEG is lossy. This is not a promise of lossless conversion or complete metadata/color preservation.
+An image-only/no-extractable-text PDF produces an OCR-not-supported explanation; page image rendering remains available. Mixed PDFs preserve page boundaries, including blank-text pages. Encrypted/password-protected PDFs are rejected; password handling is not implemented.
 
-Only single still images are accepted. APNG, animated WebP, multipage/SubIFD TIFF, multi-picture JPEG (MPF/MPO) and BMP arrays are rejected rather than silently dropping images. Unsupported image variants and corrupt/truncated content produce an error. Safety limits are 16 million pixels, 16,384 pixels per side, 128 MiB encoded input and 128 MiB decoded pixel data; a 128 MiB decoder-allocation budget is also requested. The library's allocation budget is best effort, not a hard cap on total process memory. Orientation, normalized pixels and encoders require additional bounded image buffers. Oversized images fail with a readable message.
+### PDF pages to images
 
-Decoding and encoding run off the UI thread. Image jobs show real stages and indeterminate progress, without estimated percentages or processed media time. Cancellation is checked between stages (and during compositing/header scans); a codec operation may need to finish first. After cancellation, its output is never published and its owned staging file is removed. Output is staged beside the destination, flushed, decoded again to verify its actual format and oriented dimensions, then published without overwriting. Originals and existing destinations are protected.
+Choose PNG or JPEG and leave Pages blank for all pages, or enter a validated range such as `1-3, 5`. Duplicates are removed and results follow document order. Rendering uses **150 DPI**, respects page rotation/aspect ratio and produces white-background images, including JPEG quality 90.
 
-## Converting one audio/video file
+In the Save dialog, enter a **new output folder name**. Ordered files such as `document-page-001.png` are rendered sequentially in a job-owned staging directory. Every page is decoded again to validate its format/dimensions. Only the completed folder is published, without replacing an existing folder. Cancellation/failure removes the job's staging folder. Progress reports actual completed page counts.
 
-Select a file. FFprobe validates its container and identifies the first actual video stream and first audio stream; embedded cover art, subtitles, attachments, chapters, and metadata are excluded. Audio outputs require an audio stream. Video outputs use the first actual video stream and optional first audio stream. Odd video dimensions are rounded up to even dimensions for the fixed codec presets.
+### Images to PDF
 
-Choose an available output and select **Convert**. A native Save dialog suggests `<input>_converted.<format>`. The chosen filename is normalized to the correct extension. The original file and existing destinations are protected, including if another application creates the destination during conversion; choose another filename when a destination exists.
+Use the dedicated mode within Converter; single-image conversion remains separate. Choose multiple still images, add more, remove or use Move up/Move down. Each visible row becomes one PDF page in that order; duplicate additions are ignored. Choose **A4** (fit inside 12.7 mm margins) or **Image-sized** (150 DPI, no margins). Aspect ratio and EXIF orientation are applied; transparency is composited onto white. Images are decoded one at a time and embedded as JPEG at quality 90. Animated/multipage inputs are rejected. The resulting PDF is reopened and its page count validated before publication.
 
-FFmpeg runs without a shell into a unique temporary file beside the destination. Progress comes from its machine-readable output; when duration is unknown, the UI shows indeterminate progress and the reported processed time. Completion requires a successful process exit, a nonempty output, and FFprobe validation of the expected container and encoded streams before no-overwrite publication. This is a structural output check, not a full decode audit.
+### Limits
 
-Only one conversion runs at a time. File, format, and engine controls are locked during the job. **Cancel conversion** terminates and reaps the owned process and cleans up only its staging file. Closing the app also stops its owned process and removes its active temporary output. Progress and terminal results remain visible when navigating away and back; there is no queue or conversion history.
+- Text source: 4 MiB, 128 nesting levels, 100,000 parser nodes/events; normalized assets: 16 MiB combined, with existing per-image limits; normal text output: 32 MiB.
+- PDF input/output validation: 128 MiB and 1–500 pages. Extraction: at most two million characters per page and 32 MiB extracted text; escaped reconstruction is bounded to 64 MiB.
+- PDF page rendering: at most 16 million pixels/16,384 pixels per side at 150 DPI; sequential pages and at most 512 MiB staged page-image output.
+- Images to PDF: 1–100 still images and 100 million combined decoded pixels. PDF document assets share the combined pixel budget. Individual image limits remain 16 million pixels, 16,384 pixels per side and 128 MiB input/decoded data.
 
-Document conversion is not available yet. Its category remains extension-based, and its listed routes are plans whose actual support will be validated with future engines. Downloader, Queue, History, and Settings remain placeholders. Batch processing, downloading, OCR and advanced quality controls are not implemented.
+These bounds limit application-managed buffers; PDFium/codec internal allocations are not an operating-system memory sandbox. Very complex documents may still fail. Progress is indeterminate during layout/encoding steps without measurable totals, and page-based once page totals are known.
 
-## Development
+## Retained audio/video and image behavior
 
-From the project root, launch the desktop application:
+Bundled FFmpeg/FFprobe **9.0.2 essentials** validate media and use explicit H.264/AAC (MP4/MKV), VP9/Opus (WebM), MP3, PCM WAV, FLAC and AAC M4A presets. Audio extraction requires an audio stream. The first actual video stream and optional first audio stream are selected; cover art, subtitles and attachments are excluded. Media progress comes from FFmpeg. Success requires exit and output-container/codec validation. Cancellation/app exit terminates and reaps the owned process. See [the pinned manifest](scripts/ffmpeg-manifest.json).
+
+Single-image conversion uses compiled Rust `image = 0.25.10`, with only JPEG, PNG, WebP, BMP and TIFF codecs. EXIF orientation is applied; dimensions are preserved after orientation. Supported alpha is retained except JPEG, which composites onto white at quality 90. Outputs use 8-bit channels; WebP is lossless for normalized pixels. Metadata/ICC profiles are not copied and no ICC color transform is performed. Animated/multipage images and corrupt/oversized inputs are rejected. This is not complete metadata preservation or universally lossless conversion.
+
+## Bundled components and development
+
+Users install no conversion tools, choose no engine folders and receive no first-launch engine downloads. FFmpeg/FFprobe are local sidecars; PDFium is an application-local DLL with V8 and XFA disabled. Native image/text libraries are compiled into the app. Missing/damaged bundled assets produce a repair message; there is no PATH/system-tool fallback.
+
+The local Tauri 2 CLI, React, TypeScript, Vite and plain CSS foundation requires Windows x64, Node/npm, Rust MSVC, C++ build tools/Windows SDK and WebView2. npm/Cargo lockfiles are retained. On a fresh checkout use `npm ci`.
+
+Desktop launch (native dialogs/conversion):
 
 ```sh
 npm run tauri dev
 ```
 
-The desktop command starts Vite and the native Tauri application. Native file selection requires this desktop launch.
-
-To start only the frontend in a browser:
+Frontend preview only (no native dialogs/conversion):
 
 ```sh
 npm run dev
 ```
 
-The browser preview cannot open the native file dialog and displays a message directing you to the desktop app.
+Desktop development/build hooks run `engines:prepare` and `pdf:prepare` before the frontend. Pinned URLs, SHA-256 hashes, versions and build flags are in `scripts/ffmpeg-manifest.json` and `scripts/pdf-manifest.json`. Verified project-local caches are reused; downloads/extraction happen only during developer setup/build. No global installation or PATH changes occur. `npm run pdf:prepare` can be run separately; `npm run pdf:verify-resources` checks the compiled debug payload. Generated assets/caches are ignored by Git. Preserve tracked manifests, preparation scripts and notices.
 
-The Tauri CLI is a local development dependency. Node.js/npm, Rust with the MSVC toolchain, Visual Studio C++ build tools, a Windows SDK, and WebView2 are required. The npm and Cargo lockfiles are retained. Only `x86_64-pc-windows-msvc` is supported; preparation and native builds reject other targets clearly. Use a Windows x64 CI runner.
-
-On a fresh checkout, run `npm ci`. Both desktop development and installer builds automatically run project-local engine preparation before compiling; `npm run engines:prepare` can also be run explicitly. The script downloads the pinned archive only when verified sidecars are absent, verifies SHA-256 before extraction, and extracts only FFmpeg, FFprobe and the archive's two notice files. Already verified binaries are reused; a verified cached archive supports offline regeneration. A mismatched cache fails with an actionable error. No global tools or PATH changes are made.
-
-Generated engines live in `src-tauri/binaries/ffmpeg-x86_64-pc-windows-msvc.exe` and `ffprobe-x86_64-pc-windows-msvc.exe`. These and `.engine-cache/` are ignored by Git. Keep the tracked preparation scripts, manifest and notices. CI may cache `.engine-cache/`; preparation always checks hashes. The Tauri hooks run preparation and then the frontend command, without recursive npm hooks.
-
-Build the Windows MSI (for development verification while redistribution review remains open):
+Build a Windows debug application without an installer:
 
 ```sh
-npm run tauri -- build --ci
+npm run tauri -- build --debug --no-bundle
 ```
 
-The release executable is `src-tauri/target/release/clip-clip-go.exe`. The installer is `src-tauri/target/release/bundle/msi/Clip-Clip-Go_0.1.0_x64_en-US.msi`. An explicit `--target x86_64-pc-windows-msvc` adds that target directory between `target/` and `release/`. Tauri caches WiX packaging tools locally in `src-tauri/target/.tauri/`; it may download these build tools and the WebView2 bootstrapper during packaging. This does not install the app.
+The executable is `src-tauri/target/debug/clip-clip-go.exe`. Retain its accompanying `ffmpeg.exe`, `ffprobe.exe`, `pdf/` and `notices/` trees. Copying the executable alone is insufficient; no portable ZIP is provided. This milestone does not build/install an MSI or implement installer component selection.
 
-No portable ZIP is provided. Copying the app executable alone is insufficient: any portable folder must retain the accompanying `ffmpeg.exe`, `ffprobe.exe` and `notices/ffmpeg/` directory. Normal installed first use needs no engine download.
+Notices are in `third-party/ffmpeg`, `third-party/text` and `third-party/pdf` and are packaged under `notices/`. PDFium binary dependencies, Noto Sans OFL, and native wrapper licenses are retained. The application license is unchanged. **FFmpeg public redistribution/source obligations remain open** as documented in [its notice](third-party/ffmpeg/NOTICE.md); attribution alone is insufficient.
 
-Inspect an MSI payload without installation using `powershell -NoProfile -File scripts/verify-installer.ps1 -Installer <project-local-msi-path>`. It reads the MSI and extracts embedded cabinets into the project cache, then verifies engine/notice hashes and installation directories.
+See [docs/text-pdf.md](docs/text-pdf.md) for measured cleanup, dependency/resource sizes and verification results.
 
-## Verification
+## Verification and manual checks
 
-- `npm run engines:verify`: verify prepared binaries, notices, static DLL imports, versions and required encoders without downloading.
-- `npm test`: focused preparation, compatibility, selection locking, and conversion-state tests using Node's built-in test runner.
-- `npm run typecheck`: TypeScript checking.
-- `npm run build`: TypeScript checking and frontend production build.
-- `cargo check --manifest-path src-tauri/Cargo.toml`: native checking.
-- `cargo test --manifest-path src-tauri/Cargo.toml`: command/preset, FFprobe, progress, cancellation/reaping, output protection, and failure-cleanup tests, plus generated image fixtures for all 25 input/output pairs, alpha, EXIF orientation, animation/pages, decoding limits and cancellation. The real-engine smoke test runs with an empty PATH in an isolated child process, uses prepared sidecars, generates a short video/audio fixture and exercises all seven existing output presets plus audio-only WAV-to-FLAC in `src-tauri/target/conversion-tests`, with cleanup. Missing sidecars fail the test rather than silently skipping. Other tests use mock process results.
+Automated: `npm test`, `npm run typecheck`, `npm run build`, `cargo test --manifest-path src-tauri/Cargo.toml`, `cargo check --manifest-path src-tauri/Cargo.toml`, and the debug build above. This checkout's cached Rust checks use PowerShell `$env:CARGO_HOME="$PWD/.cargo-cache"` and `$env:CARGO_NET_OFFLINE="true"`; temporary files can be directed to `.engine-cache/tmp`. `node scripts/check-converter-layout.mjs` creates isolated development fixtures in `.engine-cache/ui-check/`; it renders edge-case markup and supports CSS review, without desktop control or native dialogs.
 
-The user confirmed selection and output choices for all four categories before image conversion was added. Manual conversion and native dialog testing are performed by the user. Automated checks do not establish manual functionality verification.
+The user performs manual functionality testing. Automated/SSR checks do not establish visual or native-dialog verification.
 
-Manual checklist: launch current source with `npm run tauri dev` (or rebuild and install an updated MSI yourself); an existing installer does not update automatically when source changes. Check bundled versions without system FFmpeg or an engine folder; convert a short video and extract audio to new filenames; check a silent video and a corrupt file; cancel a longer conversion and verify no destination or staging file remains; attempt an existing/identical destination; navigate away/back while converting; close the app during a job; convert images across the five formats, check oriented dimensions and transparent PNG-to-JPEG white compositing; reject animated/multipage, corrupt and oversized images; recheck document selection with conversion disabled.
+Manual checklist: try each document route with Unicode and multiline content; verify PDF pagination/reading order; render all pages and a range to new PNG/JPEG folders; try scanned, encrypted, corrupt and missing-asset files; add/reorder/remove images, inspect A4/image-sized pages, orientation and transparency; cancel and test existing destinations; navigate away/back; recheck one audio/video and single-image conversion; confirm Office inputs are rejected; check narrow windows, keyboard focus and 200% text scaling.

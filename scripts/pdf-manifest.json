@@ -1,0 +1,49 @@
+{
+  "font": {
+    "revision": "ffebf8c1ee449e544955a7e813c54f9b73848eac",
+    "name": "Noto Sans Regular",
+    "sha256": "b85c38ecea8a7cfb39c24e395a4007474fa5a4fc864f6ee33309eb4948d232d5",
+    "url": "https://raw.githubusercontent.com/notofonts/noto-fonts/ffebf8c1ee449e544955a7e813c54f9b73848eac/hinted/ttf/NotoSans/NotoSans-Regular.ttf"
+  },
+  "pdfium": {
+    "version": "158.0.8125.0",
+    "v8": false,
+    "url": "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/8125/pdfium-win-x64.tgz",
+    "xfa": false,
+    "source": "https://pdfium.googlesource.com/pdfium/+/refs/heads/chromium/8125",
+    "sha256": "9a964261760cff52570aabf038ab346d3a5034dd8b30d0d5fe8861235d356b8b",
+    "dllSha256": "4b0dec92555d69437bef0df37be630181ab3e83a6823ca264ede355a4f2ef994",
+    "provider": "bblanchon/pdfium-binaries"
+  },
+  "target": "x86_64-pc-windows-msvc",
+  "noticeFiles": {
+    "APACHE-2.0.txt": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "NOTICE.md": "d5ab2ab1d36be67de66e18e9b8978a3fae8ee23f97e4577d08177e72bad39b67",
+    "NotoSans-OFL.txt": "0dab92d0544f7b233403f14b84a663bdbfa746982eda629e7f4f9ffe1b036feb",
+    "pdfium-render-LICENSE.md": "819dfb7c49a24bec7511f29304478d67f272bfd1f976b728095f2eb2c522791c",
+    "PROVENANCE.json": "491c09944ff892a138c56c3dbd2edddf5418dad33a15faaac5668e4225d2a695",
+    "ttf-parser-LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "ttf-parser-LICENSE-MIT": "f3c9fe731c701ed77fd5fbaac573872af04dc5869385eb9bd5e3c73c42713814",
+    "pdfium/args.gn": "161bf08999e403b7da9d924c45b7ee7bc8beb3038b08f9e174ba6761dd06a976",
+    "pdfium/LICENSE": "8854f4388f1ca13b3ad9baa42e95f5546b4c0b17109c159256d3eca7be39b09b",
+    "pdfium/VERSION": "77f606e89976f8563ad68506f457f9e37e8049793a0f8abe485840171db822d2",
+    "pdfium/licenses/abseil.txt": "f54fff0b905df5b3464527c652a30e903b172d6dcab4d89b5e6f105d5e4a4603",
+    "pdfium/licenses/agg23.txt": "c110d3ea2ad77467ce0dcff7d3337e6c8be8049a5103f4b9bd5fd911a77972e5",
+    "pdfium/licenses/dragonbox-Apache2-LLVM.txt": "4964a7aaf2801a42d2342d2f5bbccd2126be7a5d8d46150e1338a43ea70da5de",
+    "pdfium/licenses/dragonbox-Boost.txt": "beb8e42e9d6b4284e03304d05a81a0755200a965fc8d0a5e0aea1e84cf805d6e",
+    "pdfium/licenses/fast_float.txt": "bf1b57355feca8fce77ee95f48002f8d4789fb71b30ec7599c06cda4901fbb2b",
+    "pdfium/licenses/freetype.txt": "f4b133e25df1f86ad3ffea453aa0e613f0474f34778dbbb3e437e7b2724937d8",
+    "pdfium/licenses/harfbuzz.txt": "bd836c0ddca8ea0bab54a03cd32b6ff7256cbb3840fca2edc1249a4ed92c5b02",
+    "pdfium/licenses/highway.txt": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+    "pdfium/licenses/icu.txt": "93679f4389d53b6835d89843f251844fb9bc455b35bab036d3c8e7abe497a47a",
+    "pdfium/licenses/lcms.txt": "7312b68c5b25e9bf2b828706fb4e29588f22705112f411fd42e1f7d84c3d139a",
+    "pdfium/licenses/libjpeg_turbo.ijg": "db16a04128171879c60708d171b88d97345a2dd20f9bfc173680a4497c73f704",
+    "pdfium/licenses/libjpeg_turbo.md": "be2b2b5ab168bce87bc3e31f2a5c5adba4b7f6e9e51d618e958d1d46972ebd95",
+    "pdfium/licenses/libopenjpeg.txt": "c5ab0890a737c2dfa7ba675036554f6d17741d98629b0c2a145354d00617e6b2",
+    "pdfium/licenses/libpng.txt": "452390433ba0f88aa3e2b122c647741b72a0c117cd6ed7a329b49785aecb5511",
+    "pdfium/licenses/llvm-libc.txt": "3b6226c32e168c83b891d8d6f0d3c29c2116dc3ef93dc93c307b54f279ecf383",
+    "pdfium/licenses/pdfium.txt": "961eacd9633fff6d051db7208b755e9210e30efac7adec3e6a6d52798f0ccf0e",
+    "pdfium/licenses/simdutf.txt": "c172a0ba936ff31230febb5dad869e25cb7c1a07480c7a381be8cf011bb52719",
+    "pdfium/licenses/zlib.txt": "33fd641c9f3b0e0be64bc78fea9e94807674cdd70c48477599226cb8956565fe"
+  }
+}

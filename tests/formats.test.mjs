@@ -6,7 +6,7 @@ const inputCategories = {
   video: ['mp4', 'mkv', 'webm', 'mov'],
   audio: ['mp3', 'wav', 'flac', 'm4a', 'ogg'],
   image: ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'tiff', 'tif'],
-  document: ['doc', 'docx', 'odt', 'rtf', 'txt', 'ppt', 'pptx', 'odp', 'xls', 'xlsx', 'ods', 'pdf'],
+  document: ['txt', 'pdf', 'md', 'markdown', 'html', 'htm'],
 };
 
 test('all supported input extensions are categorized case-insensitively', () => {
@@ -54,22 +54,12 @@ const expectedRoutes = {
   webp: ['jpg', 'png', 'webp', 'bmp', 'tiff'],
   bmp: ['jpg', 'png', 'webp', 'bmp', 'tiff'],
   tiff: ['jpg', 'png', 'webp', 'bmp', 'tiff'],
-  doc: ['pdf', 'docx', 'odt', 'txt'],
-  docx: ['pdf', 'docx', 'odt', 'txt'],
-  odt: ['pdf', 'docx', 'odt', 'txt'],
-  rtf: ['pdf', 'docx', 'odt', 'txt'],
-  txt: ['pdf', 'docx', 'odt'],
-  ppt: ['pdf', 'pptx', 'odp'],
-  pptx: ['pdf', 'pptx', 'odp'],
-  odp: ['pdf', 'pptx', 'odp'],
-  xls: ['pdf', 'xlsx', 'ods', 'csv'],
-  xlsx: ['pdf', 'xlsx', 'ods', 'csv'],
-  ods: ['pdf', 'xlsx', 'ods', 'csv'],
-  pdf: ['txt', 'png', 'jpg'],
+  txt: ['md', 'html', 'pdf'],
+  pdf: ['txt', 'md', 'html', 'png', 'jpg'],
 };
 
 for (const [input, expected] of Object.entries(expectedRoutes)) {
-  test(`${input.toUpperCase()} offers exactly its planned routes`, () => {
+  test(`${input.toUpperCase()} offers exactly its implemented routes`, () => {
     assert.deepEqual(outputFormats(input), expected);
     for (const output of [...inputExtensions, 'csv', 'ocr', 'exe', '']) {
       assert.equal(isCompatible(input, output), expected.includes(output), `${input} -> ${output}`);
@@ -86,16 +76,11 @@ test('UI output groups exactly match route rules and preserve audio extraction g
   assert.deepEqual(inputGroups.flatMap(group => group.extensions).sort(), [...inputExtensions].sort());
 });
 
-test('contextual notes cover only the relevant PDF and CSV route', () => {
-  assert.match(outputHelp('pdf', 'txt'), /text-based PDF/);
-  assert.match(outputHelp('pdf', 'txt'), /Scanned documents need OCR, which is not offered/);
-  for (const format of ['png', 'jpg']) {
-    assert.match(outputHelp('pdf', format), /one image per page/);
-    assert.doesNotMatch(outputHelp('pdf', format), /OCR/);
+test('contextual PDF notes explain reconstruction, OCR and page rendering', () => {
+  for (const format of ['txt','md','html']) {
+    assert.match(outputHelp('pdf',format),/Reconstructed text/);
+    assert.match(outputHelp('pdf',format),/OCR/);
   }
-  for (const input of ['xls', 'xlsx', 'ods']) {
-    assert.match(outputHelp(input, 'csv'), /only one sheet/);
-    assert.doesNotMatch(outputHelp(input, 'pdf'), /only one sheet/);
-  }
-  assert.doesNotMatch(outputHelp('jpg', 'png'), /OCR|sheet|per page/);
+  for (const format of ['png','jpg']) assert.match(outputHelp('pdf',format),/150 DPI/);
+  for (const name of ['report.doc','report.docx','report.odt','sheet.xlsx','slides.pptx','notes.rtf','sheet.ods','slides.odp']) assert.equal(identifyFile(name),null);
 });

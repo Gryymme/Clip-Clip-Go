@@ -1,0 +1,387 @@
+use super::*;
+fn work() -> tempfile::TempDir {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/pdf-tests");
+    std::fs::create_dir_all(&root).unwrap();
+    tempfile::tempdir_in(root).unwrap()
+}
+fn quiet(_: u16, _: u16) {}
+fn fixture(path: &Path, color: [u8; 4], w: u32, h: u32) {
+    image::RgbaImage::from_pixel(w, h, image::Rgba(color))
+        .save(path)
+        .unwrap();
+}
+
+#[test]
+fn text_pdf_unicode_pagination_and_reconstruction() {
+    let dir = work();
+    let input = dir.path().join("notes.TXT");
+    let output = dir.path().join("notes.pdf");
+    let control = Control::default();
+    let marker = "café Ελληνικά Привет — <literal> & [brackets]";
+    std::fs::write(
+        &input,
+        format!(
+            "{marker}\n{}",
+            (1..200)
+                .map(|i| format!("Line {i}: {}\n", "wrapped content ".repeat(12)))
+                .collect::<String>()
+        ),
+    )
+    .unwrap();
+    let mut progress = Vec::new();
+    generate(&input, &output, &control, &mut |n, t| progress.push((n, t))).unwrap();
+    let info = inspect(&output, &control).unwrap();
+    assert!(info.pages > 3 && info.has_text);
+    assert_eq!(progress.last(), Some(&(info.pages, info.pages)));
+    let text = extract(&output, OutputFormat::Txt, &control, &mut quiet).unwrap();
+    assert!(text.contains(marker), "{text}");
+    assert!(text.contains("Line 199"));
+    assert!(text.contains('\u{000c}'));
+    let md = extract(&output, OutputFormat::Md, &control, &mut quiet).unwrap();
+    assert!(md.contains("## Page 1"));
+    assert!(md.contains("\\<literal\\>"));
+    let html = extract(&output, OutputFormat::Html, &control, &mut quiet).unwrap();
+    assert_eq!(html.matches("<section>").count(), info.pages as usize);
+    assert!(html.contains("&lt;literal&gt;"));
+    let _lock = SERIAL.lock().unwrap();
+    let doc = load(library().unwrap(), &output).unwrap();
+    let page = doc.pages().get(0).unwrap();
+    assert!(page.fonts().iter().all(|f| f.is_embedded().unwrap()));
+    for page in doc.pages().iter() {
+        let text = page.text().unwrap();
+        for c in text.chars().iter() {
+            if let Ok(bounds) = c.loose_bounds() {
+                assert!(
+                    bounds.left().value >= 35.0 && bounds.right().value < 570.0,
+                    "{bounds:?}"
+                );
+            }
+        }
+    }
+}
+#[test]
+fn text_pdf_structure_assets_and_unsupported_glyphs() {
+    let dir = work();
+    let control = Control::default();
+    let asset = dir.path().join("local.png");
+    fixture(&asset, [255, 0, 0, 255], 30, 15);
+    for (ext,source) in [("md","# Heading\n\n- First\n- Second\n\n[Link](https://example.test)\n\n```\nlet x = 1;\n```\n\n| A | B |\n|---|---|\n| 1 | 2 |\n\n![Local](local.png)"),("html","<h1>Heading</h1><ul><li>First</li><li>Second</li></ul><a href='https://example.test'>Link</a><pre><code>let x = 1;</code></pre><table><tr><td>A</td><td>B</td></tr></table><img src='local.png'>")] {
+        let input=dir.path().join(format!("source.{ext}"));let output=dir.path().join(format!("{ext}.pdf"));std::fs::write(&input,source).unwrap();generate(&input,&output,&control,&mut quiet).unwrap();let text=extract(&output,OutputFormat::Txt,&control,&mut quiet).unwrap();for expected in ["Heading","First","Second","https://example.test","let x = 1;","A | B"]{assert!(text.contains(expected),"{expected}: {text}");}
+    }
+    let input = dir.path().join("bad.md");
+    std::fs::write(&input, "![missing](missing.png)").unwrap();
+    assert!(
+        generate(&input, &dir.path().join("bad.pdf"), &control, &mut quiet)
+            .unwrap_err()
+            .contains("missing")
+    );
+    for source in ["漢字", "مرحبا", "e\u{301}", "🙂"] {
+        std::fs::write(&input, source).unwrap();
+        assert!(generate(
+            &input,
+            &dir.path().join("unsupported.pdf"),
+            &control,
+            &mut quiet
+        )
+        .is_err());
+        assert!(!dir.path().join("unsupported.pdf").exists());
+    }
+}
+#[test]
+fn images_pdf_order_alpha_aspect_scanned_and_rendering() {
+    let dir = work();
+    let control = Control::default();
+    let blue = dir.path().join("blue.png");
+    let red = dir.path().join("red.png");
+    let alpha = dir.path().join("alpha.png");
+    fixture(&blue, [0, 0, 255, 255], 20, 40);
+    fixture(&red, [255, 0, 0, 255], 40, 20);
+    fixture(&alpha, [0, 0, 0, 0], 20, 20);
+    let output = dir.path().join("images.pdf");
+    let inputs = vec![blue, red, alpha];
+    images_to_pdf(&inputs, &output, ImagePageSize::Image, &control, &mut quiet).unwrap();
+    let info = inspect(&output, &control).unwrap();
+    assert_eq!(info.pages, 3);
+    assert!(!info.has_text);
+    assert!(extract(&output, OutputFormat::Txt, &control, &mut quiet)
+        .unwrap_err()
+        .contains("OCR"));
+    {
+        let _lock = SERIAL.lock().unwrap();
+        let doc = load(library().unwrap(), &output).unwrap();
+        for (i, expected) in [[0u8, 0, 255], [255, 0, 0], [255, 255, 255]]
+            .iter()
+            .enumerate()
+        {
+            let page = doc.pages().get(i as i32).unwrap();
+            let image = page
+                .render_with_config(
+                    &PdfRenderConfig::new()
+                        .set_target_size(100, 100)
+                        .set_clear_color(PdfColor::WHITE),
+                )
+                .unwrap()
+                .as_image()
+                .unwrap()
+                .to_rgb8();
+            let pixel = image.get_pixel(50, 50);
+            for c in 0..3 {
+                assert!(
+                    (i16::from(pixel[c]) - i16::from(expected[c])).abs() < 8,
+                    "{i} {pixel:?}"
+                );
+            }
+        }
+        assert!(doc.pages().get(0).unwrap().height() > doc.pages().get(0).unwrap().width());
+    }
+    for format in [OutputFormat::Png, OutputFormat::Jpg] {
+        let folder = dir.path().join(format.extension());
+        let mut progress = Vec::new();
+        render_pages(
+            &output,
+            &folder,
+            format,
+            &PdfOptions {
+                pages: Some("3,1-2,2".into()),
+            },
+            &control,
+            &mut |n, t| progress.push((n, t)),
+        )
+        .unwrap();
+        let files = std::fs::read_dir(&folder)
+            .unwrap()
+            .collect::<std::io::Result<Vec<_>>>()
+            .unwrap();
+        assert_eq!(files.len(), 3);
+        assert_eq!(progress, vec![(1, 3), (2, 3), (3, 3)]);
+        let first =
+            image::open(folder.join(format!("images-page-001.{}", format.extension()))).unwrap();
+        assert_eq!((first.width(), first.height()), (20, 40));
+        let white = image::open(folder.join(format!("images-page-003.{}", format.extension())))
+            .unwrap()
+            .to_rgb8();
+        assert!(white.get_pixel(5, 5)[0] > 245);
+    }
+    let a4 = dir.path().join("a4.pdf");
+    images_to_pdf(&inputs, &a4, ImagePageSize::A4, &control, &mut quiet).unwrap();
+    let _lock = SERIAL.lock().unwrap();
+    let doc = load(library().unwrap(), &a4).unwrap();
+    assert!((doc.pages().get(0).unwrap().width().value - 595.276).abs() < 0.1);
+}
+#[test]
+fn ranges_cancellation_and_output_protection() {
+    assert_eq!(page_range(Some("3,1-2,2"), 4).unwrap(), vec![0, 1, 2]);
+    assert_eq!(page_range(None, 2).unwrap(), vec![0, 1]);
+    for invalid in ["0", "5", "2-1", "1-", "1,,2", "1.5", "1-99", "-1", "1–2"] {
+        assert!(page_range(Some(invalid), 4).is_err(), "{invalid}");
+    }
+    let dir = work();
+    let input = dir.path().join("source.png");
+    fixture(&input, [255, 0, 0, 255], 10, 10);
+    let pdf = dir.path().join("source.pdf");
+    images_to_pdf(
+        &[input.clone(), input.clone()],
+        &pdf,
+        ImagePageSize::A4,
+        &Control::default(),
+        &mut quiet,
+    )
+    .unwrap();
+    let folder = dir.path().join("cancelled");
+    let control = Control::default();
+    assert!(render_pages(
+        &pdf,
+        &folder,
+        OutputFormat::Png,
+        &PdfOptions::default(),
+        &control,
+        &mut |_, _| control.cancel()
+    )
+    .is_err());
+    assert!(!folder.exists());
+    assert!(std::fs::read_dir(dir.path()).unwrap().all(|f| !f
+        .unwrap()
+        .file_name()
+        .to_string_lossy()
+        .starts_with(".clip-clip-go")));
+    let folder = dir.path().join("race");
+    let result = render_pages(
+        &pdf,
+        &folder,
+        OutputFormat::Png,
+        &PdfOptions::default(),
+        &Control::default(),
+        &mut |n, total| {
+            if n == total {
+                std::fs::create_dir(&folder).unwrap();
+                std::fs::write(folder.join("user.txt"), "preserve").unwrap();
+            }
+        },
+    );
+    assert!(result.is_err());
+    assert_eq!(
+        std::fs::read_to_string(folder.join("user.txt")).unwrap(),
+        "preserve"
+    );
+    let existing = dir.path().join("existing.pdf");
+    std::fs::write(&existing, "keep").unwrap();
+    assert!(images_to_pdf(
+        &[input],
+        &existing,
+        ImagePageSize::A4,
+        &Control::default(),
+        &mut quiet
+    )
+    .is_err());
+    assert_eq!(std::fs::read_to_string(existing).unwrap(), "keep");
+    assert!(render_pages(
+        &pdf,
+        dir.path(),
+        OutputFormat::Png,
+        &PdfOptions::default(),
+        &Control::default(),
+        &mut quiet
+    )
+    .is_err());
+}
+#[test]
+fn corrupt_encrypted_and_image_validation() {
+    let dir = work();
+    let corrupt = dir.path().join("corrupt.pdf");
+    std::fs::write(&corrupt, b"not PDF").unwrap();
+    assert!(inspect(&corrupt, &Control::default()).is_err());
+    // Generated valid PDF envelope with a standard password security dictionary.
+    let objects=["<< /Type /Catalog /Pages 2 0 R >>","<< /Type /Pages /Kids [3 0 R] /Count 1 >>","<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>","<< /Filter /Standard /V 1 /R 2 /Length 40 /P -4 /O <0000000000000000000000000000000000000000000000000000000000000000> /U <0000000000000000000000000000000000000000000000000000000000000000> >>"];
+    let mut pdf = String::from("%PDF-1.4\n");
+    let mut offsets = vec![0];
+    for (i, object) in objects.iter().enumerate() {
+        offsets.push(pdf.len());
+        pdf.push_str(&format!("{} 0 obj\n{object}\nendobj\n", i + 1));
+    }
+    let xref = pdf.len();
+    pdf.push_str("xref\n0 5\n0000000000 65535 f \n");
+    for offset in offsets.iter().skip(1) {
+        pdf.push_str(&format!("{offset:010} 00000 n \n"));
+    }
+    pdf.push_str(&format!("trailer\n<< /Size 5 /Root 1 0 R /Encrypt 4 0 R /ID [<00000000000000000000000000000000><00000000000000000000000000000000>] >>\nstartxref\n{xref}\n%%EOF"));
+    let encrypted = dir.path().join("encrypted.pdf");
+    std::fs::write(&encrypted, pdf).unwrap();
+    assert!(inspect(&encrypted, &Control::default())
+        .unwrap_err()
+        .contains("password"));
+    let bad = dir.path().join("bad.png");
+    std::fs::write(&bad, b"not image").unwrap();
+    assert!(images_to_pdf(
+        &[bad],
+        &dir.path().join("bad.pdf"),
+        ImagePageSize::A4,
+        &Control::default(),
+        &mut quiet
+    )
+    .is_err());
+}
+
+#[test]
+fn rotation_exif_multipage_and_safe_boundary_cancellation() {
+    let dir = work();
+    let control = Control::default();
+    let image = dir.path().join("oriented.jpg");
+    let mut jpeg = Vec::new();
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, 95)
+        .encode_image(&image::DynamicImage::ImageRgb8(
+            image::RgbImage::from_pixel(40, 20, image::Rgb([255, 0, 0])),
+        ))
+        .unwrap();
+    let tiff = b"II*\0\x08\0\0\0\x01\0\x12\x01\x03\0\x01\0\0\0\x06\0\0\0\0\0\0\0";
+    let mut oriented = jpeg[..2].to_vec();
+    oriented.extend([0xff, 0xe1]);
+    oriented.extend(((tiff.len() + 8) as u16).to_be_bytes());
+    oriented.extend(b"Exif\0\0");
+    oriented.extend(tiff);
+    oriented.extend(&jpeg[2..]);
+    std::fs::write(&image, oriented).unwrap();
+    let output = dir.path().join("oriented.pdf");
+    images_to_pdf(
+        &[image.clone()],
+        &output,
+        ImagePageSize::Image,
+        &control,
+        &mut quiet,
+    )
+    .unwrap();
+    {
+        let _lock = SERIAL.lock().unwrap();
+        let doc = load(library().unwrap(), &output).unwrap();
+        let page = doc.pages().get(0).unwrap();
+        assert!(page.height() > page.width());
+    }
+    let rotated = dir.path().join("rotated.pdf");
+    {
+        let _lock = SERIAL.lock().unwrap();
+        let pdf = library().unwrap();
+        let doc = load(pdf, &output).unwrap();
+        doc.pages()
+            .get(0)
+            .unwrap()
+            .set_rotation(PdfPageRenderRotation::Degrees90);
+        doc.save_to_file(&rotated).unwrap();
+    }
+    let folder = dir.path().join("rotated-pages");
+    render_pages(
+        &rotated,
+        &folder,
+        OutputFormat::Png,
+        &PdfOptions::default(),
+        &control,
+        &mut quiet,
+    )
+    .unwrap();
+    let rendered = image::open(folder.join("rotated-page-001.png")).unwrap();
+    assert!(
+        rendered.width() > rendered.height(),
+        "{}x{}",
+        rendered.width(),
+        rendered.height()
+    );
+    let multipage = dir.path().join("multipage.tiff");
+    {
+        let mut writer =
+            tiff::encoder::TiffEncoder::new(std::fs::File::create(&multipage).unwrap()).unwrap();
+        for _ in 0..2 {
+            writer
+                .write_image::<tiff::encoder::colortype::RGB8>(2, 2, &[255; 12])
+                .unwrap();
+        }
+    }
+    assert!(images_to_pdf(
+        &[multipage],
+        &dir.path().join("reject.pdf"),
+        ImagePageSize::A4,
+        &control,
+        &mut quiet
+    )
+    .unwrap_err()
+    .contains("multipage"));
+    let cancelled = Control::default();
+    let destination = dir.path().join("cancel-image.pdf");
+    assert!(images_to_pdf(
+        &[image.clone(), image],
+        &destination,
+        ImagePageSize::A4,
+        &cancelled,
+        &mut |_, _| cancelled.cancel()
+    )
+    .is_err());
+    assert!(!destination.exists());
+    let input = dir.path().join("cancel-text.txt");
+    std::fs::write(&input, "Text\n".repeat(400)).unwrap();
+    let cancelled = Control::default();
+    assert!(generate(
+        &input,
+        &dir.path().join("cancel-text.pdf"),
+        &cancelled,
+        &mut |_, _| cancelled.cancel()
+    )
+    .is_err());
+    assert!(!dir.path().join("cancel-text.pdf").exists());
+}

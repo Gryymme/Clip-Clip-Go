@@ -30,12 +30,46 @@ fn main() {
         let path = format!("../third-party/ffmpeg/{name}");
         assert!(engine_integrity::verify(std::path::Path::new(&path), hash.as_str().unwrap()).unwrap_or(false), "Required FFmpeg notice {name} is missing or changed. Restore third-party/ffmpeg before building.");
     }
+    println!("cargo:rerun-if-changed=../scripts/pdf-manifest.json");
+    println!("cargo:rerun-if-changed=../third-party/pdf");
+    let pdf: serde_json::Value = serde_json::from_str(
+        include_str!("../scripts/pdf-manifest.json").trim_start_matches('\u{feff}'),
+    )
+    .expect("Invalid PDF manifest");
+    for (name, hash) in [
+        ("pdfium.dll", pdf["pdfium"]["dllSha256"].as_str()),
+        ("NotoSans-Regular.ttf", pdf["font"]["sha256"].as_str()),
+    ] {
+        let path = format!("resources/pdf/{name}");
+        println!("cargo:rerun-if-changed={path}");
+        assert!(
+            engine_integrity::verify(
+                std::path::Path::new(&path),
+                hash.expect("Missing PDF asset hash")
+            )
+            .unwrap_or(false),
+            "Bundled PDF asset {name} is missing or damaged. Run npm run pdf:prepare."
+        );
+    }
+    for (name, hash) in pdf["noticeFiles"].as_object().expect("Missing PDF notices") {
+        assert!(
+            engine_integrity::verify(
+                std::path::Path::new(&format!("../third-party/pdf/{name}")),
+                hash.as_str().unwrap()
+            )
+            .unwrap_or(false),
+            "Required PDF notice {name} changed or missing."
+        );
+    }
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
             "select_media_file",
             "configure_engines",
             "probe_media",
             "probe_image",
+            "probe_pdf",
+            "select_images",
+            "start_images_pdf",
             "start_conversion",
             "get_conversion_status",
             "cancel_conversion",

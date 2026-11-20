@@ -95,21 +95,14 @@ test('image aliases retain original metadata and a canonical input format', () =
   }
 });
 
-test('document output validation uses the specific input, not just its category', () => {
-  const docx = reduce(select(initialSelection, file('report.DOCX')), { type: 'output', format: 'docx' });
-  const pdf = select(docx, file('report.PDF'));
-  assert.equal(pdf.file.category, 'document');
-  assert.equal(pdf.file.format, 'pdf');
-  assert.equal(pdf.output, 'txt');
-  assert.equal(reduce(pdf, { type: 'output', format: 'docx' }), pdf);
-  const text = select(pdf, file('notes.TXT'));
-  assert.equal(text.output, 'pdf');
-  assert.equal(reduce(text, { type: 'output', format: 'txt' }), text);
-  const sheet = reduce(select(text, file('budget.xlsx')), { type: 'output', format: 'csv' });
-  assert.equal(sheet.output, 'csv');
-  assert.equal(select(sheet, file('slides.pptx')).output, 'pdf');
+test('unsupported Office selection preserves the previous working file and output', () => {
+  const before=select(initialSelection,file('notes.txt'));
+  for (const name of ['report.docx','budget.xlsx','slides.odp','old.rtf']) {
+    const next=select(before,file(name));
+    assert.deepEqual(next.file,before.file);assert.equal(next.output,before.output);
+    assert.match(next.error,/Office and OpenDocument files are not supported/);
+  }
 });
-
 test('replacement across categories retains only still-valid output choices', () => {
   const image = reduce(select(initialSelection, file('photo.jpeg')), { type: 'output', format: 'png' });
   const pdf = select(image, file('report.pdf'));
@@ -121,7 +114,7 @@ test('replacement across categories retains only still-valid output choices', ()
 });
 
 test('cancel, errors and removal preserve the same guarantees for the new categories', () => {
-  for (const name of ['photo.jpeg', 'scan.tif', 'report.docx', 'deck.odp', 'sheet.ods', 'report.pdf']) {
+  for (const name of ['photo.jpeg', 'scan.tif', 'notes.txt', 'readme.markdown', 'page.htm', 'report.pdf']) {
     const original = select(initialSelection, file(name));
     const cancelled = select(original, null);
     assert.deepEqual(cancelled.file, original.file);

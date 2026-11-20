@@ -1,0 +1,2 @@
+# Preserve the exact upstream bytes pinned by scripts/pdf-manifest.json.
+third-party/pdf/** -text

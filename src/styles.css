@@ -183,6 +183,13 @@ h2 { margin: 0 0 var(--space-3); font-size: var(--text-body); font-weight: var(-
 .placeholder .placeholder-note { margin-block-start: var(--space-5); font-size: var(--text-small); }
 
 .converter { max-inline-size: 55rem; }
+.converter-modes { margin-block: 0 var(--space-6); }
+.converter-modes [aria-pressed="true"] { border-color: var(--color-accent); background: var(--color-accent-surface); color: var(--color-accent-text); }
+.image-pdf-list { display: grid; gap: var(--space-5); padding-inline-start: var(--space-5); }
+.image-pdf-list li { min-inline-size: 0; }
+.image-pdf-name { display: grid; gap: var(--space-1); min-inline-size: 0; overflow-wrap: anywhere; }
+.image-pdf-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-block-start: var(--space-2); }
+.text-input { display: block; inline-size: min(100%, 25rem); min-inline-size: 0; min-block-size: var(--control-min-size); border: 1px solid var(--color-secondary); border-radius: var(--radius-control); padding: var(--space-2) var(--space-3); background: var(--color-sidebar); color: var(--color-text); font: inherit; }
 .converter-section + .converter-section { margin-block-start: var(--space-7); }
 .converter > .supported-inputs { margin-block: var(--space-6); }
 .field-help { margin: var(--space-2) 0 0; color: var(--color-secondary); font-size: var(--text-small); }

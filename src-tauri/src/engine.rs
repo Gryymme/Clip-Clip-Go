@@ -16,6 +16,11 @@ pub enum OutputFormat {
     Wav,
     Flac,
     M4a,
+    Html,
+    Txt,
+    #[serde(alias = "markdown")]
+    Md,
+    Pdf,
     #[serde(alias = "jpeg")]
     Jpg,
     Png,
@@ -44,6 +49,10 @@ impl OutputFormat {
             Self::Wav => "wav",
             Self::Flac => "flac",
             Self::M4a => "m4a",
+            Self::Html => "html",
+            Self::Txt => "txt",
+            Self::Md => "md",
+            Self::Pdf => "pdf",
             Self::Jpg => "jpg",
             Self::Png => "png",
             Self::Webp => "webp",
@@ -53,6 +62,9 @@ impl OutputFormat {
     }
     pub fn video(self) -> bool {
         matches!(self, Self::Mp4 | Self::Mkv | Self::Webm)
+    }
+    pub fn text(self) -> bool {
+        matches!(self, Self::Html | Self::Txt | Self::Md)
     }
     pub fn image(self) -> bool {
         matches!(
@@ -68,7 +80,15 @@ impl OutputFormat {
             Self::Wav => (None, "pcm_s16le"),
             Self::Flac => (None, "flac"),
             Self::M4a => (None, "aac"),
-            Self::Jpg | Self::Png | Self::Webp | Self::Bmp | Self::Tiff => (None, ""),
+            Self::Jpg
+            | Self::Png
+            | Self::Webp
+            | Self::Bmp
+            | Self::Tiff
+            | Self::Html
+            | Self::Txt
+            | Self::Md => (None, ""),
+            Self::Pdf => (None, ""),
         }
     }
 }
@@ -128,7 +148,7 @@ pub fn availability(
     video_input: bool,
 ) -> Availability {
     let (video_codec, audio_codec) = format.codecs();
-    let reason = if format.image() {
+    let reason = if format.image() || format.text() {
         Some("Image outputs require an image input and the built-in image converter.".into())
     } else if format.video() && !video_input {
         Some("Audio inputs offer audio outputs only.".into())

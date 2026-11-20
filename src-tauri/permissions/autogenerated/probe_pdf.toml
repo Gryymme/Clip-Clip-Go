@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-probe-pdf"
+description = "Enables the probe_pdf command without any pre-configured scope."
+commands.allow = ["probe_pdf"]
+
+[[permission]]
+identifier = "deny-probe-pdf"
+description = "Denies the probe_pdf command without any pre-configured scope."
+commands.deny = ["probe_pdf"]

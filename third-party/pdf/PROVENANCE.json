@@ -1,0 +1,21 @@
+{
+  "pdfium": {
+    "version": "158.0.8125.0",
+    "v8": false,
+    "url": "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/8125/pdfium-win-x64.tgz",
+    "xfa": false,
+    "source": "https://pdfium.googlesource.com/pdfium/+/refs/heads/chromium/8125",
+    "sha256": "9a964261760cff52570aabf038ab346d3a5034dd8b30d0d5fe8861235d356b8b",
+    "dllSha256": "4b0dec92555d69437bef0df37be630181ab3e83a6823ca264ede355a4f2ef994",
+    "provider": "bblanchon/pdfium-binaries"
+  },
+  "font": {
+    "revision": "ffebf8c1ee449e544955a7e813c54f9b73848eac",
+    "name": "Noto Sans Regular",
+    "sha256": "b85c38ecea8a7cfb39c24e395a4007474fa5a4fc864f6ee33309eb4948d232d5",
+    "url": "https://raw.githubusercontent.com/notofonts/noto-fonts/ffebf8c1ee449e544955a7e813c54f9b73848eac/hinted/ttf/NotoSans/NotoSans-Regular.ttf"
+  },
+  "runtimeResolution": "Application-relative pdf/pdfium.dll; no system or PATH fallback",
+  "preparation": "Pinned developer/build-time downloads, SHA-256 before extraction; no first-launch downloads",
+  "target": "x86_64-pc-windows-msvc"
+}

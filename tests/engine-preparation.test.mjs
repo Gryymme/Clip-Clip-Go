@@ -41,6 +41,6 @@ test('pinned engine manifest and nonrecursive Tauri preparation hooks agree', as
   assert.ok(config.bundle.resources['../third-party/ffmpeg/']);
   assert.equal(config.build.beforeDevCommand, 'npm run desktop:dev');
   assert.equal(config.build.beforeBuildCommand, 'npm run desktop:build');
-  assert.equal(pkg.scripts['desktop:dev'], 'npm run engines:prepare && npm run dev');
-  assert.equal(pkg.scripts['desktop:build'], 'npm run engines:prepare && npm run build');
+  assert.equal(pkg.scripts['desktop:dev'], 'npm run engines:prepare && npm run pdf:prepare && npm run dev');
+  assert.equal(pkg.scripts['desktop:build'], 'npm run engines:prepare && npm run pdf:prepare && npm run build');
 });

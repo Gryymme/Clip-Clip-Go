@@ -20,6 +20,7 @@ pub struct Control {
     pub cancelled: AtomicBool,
     pub publication: Mutex<()>,
     pub temporary: Mutex<Option<tempfile::TempPath>>,
+    pub temporary_directory: Mutex<Option<std::path::PathBuf>>,
     child: Mutex<Option<Child>>,
 }
 
@@ -39,6 +40,12 @@ impl Control {
     }
     pub fn cleanup(&self) {
         self.temporary.lock().unwrap().take();
+        let mut directory = self.temporary_directory.lock().unwrap();
+        if let Some(path) = directory.as_ref() {
+            if std::fs::remove_dir_all(path).is_ok() || !path.exists() {
+                directory.take();
+            }
+        }
     }
     fn reap(&self) {
         if let Some(mut child) = self.child.lock().unwrap().take() {

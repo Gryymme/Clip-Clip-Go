@@ -7,11 +7,7 @@ const audioOutputs = ['mp3', 'wav', 'flac', 'm4a'] as const;
 const videoOutputs = ['mp4', 'mkv', 'webm'] as const;
 const videoRoutes = [...videoOutputs, ...audioOutputs] as const;
 export const imageOutputs = ['jpg', 'png', 'webp', 'bmp', 'tiff'] as const;
-const textDocumentOutputs = ['pdf', 'docx', 'odt', 'txt'] as const;
-const presentationOutputs = ['pdf', 'pptx', 'odp'] as const;
-const spreadsheetOutputs = ['pdf', 'xlsx', 'ods', 'csv'] as const;
-
-// Selection compatibility. Document routes remain planned; native providers validate other inputs.
+// Implemented routes. Native providers independently validate file contents.
 const inputRules = {
   mp4: { category: 'video', outputs: videoRoutes },
   mkv: { category: 'video', outputs: videoRoutes },
@@ -27,23 +23,15 @@ const inputRules = {
   webp: { category: 'image', outputs: imageOutputs },
   bmp: { category: 'image', outputs: imageOutputs },
   tiff: { category: 'image', outputs: imageOutputs },
-  doc: { category: 'document', outputs: textDocumentOutputs },
-  docx: { category: 'document', outputs: textDocumentOutputs },
-  odt: { category: 'document', outputs: textDocumentOutputs },
-  rtf: { category: 'document', outputs: textDocumentOutputs },
-  txt: { category: 'document', outputs: ['pdf', 'docx', 'odt'] },
-  ppt: { category: 'document', outputs: presentationOutputs },
-  pptx: { category: 'document', outputs: presentationOutputs },
-  odp: { category: 'document', outputs: presentationOutputs },
-  xls: { category: 'document', outputs: spreadsheetOutputs },
-  xlsx: { category: 'document', outputs: spreadsheetOutputs },
-  ods: { category: 'document', outputs: spreadsheetOutputs },
-  pdf: { category: 'document', outputs: ['txt', 'png', 'jpg'] },
+  txt: { category: 'document', outputs: ['md', 'html', 'pdf'] },
+  md: { category: 'document', outputs: ['html', 'txt', 'pdf'] },
+  html: { category: 'document', outputs: ['md', 'txt', 'pdf'] },
+  pdf: { category: 'document', outputs: ['txt', 'md', 'html', 'png', 'jpg'] },
 } as const satisfies Record<string, { category: FileCategory; outputs: readonly string[] }>;
 
 export type InputFormat = keyof typeof inputRules;
 export type OutputFormat = (typeof inputRules)[InputFormat]['outputs'][number];
-const aliases = { jpeg: 'jpg', tif: 'tiff' } as const satisfies Record<string, InputFormat>;
+const aliases = { jpeg: 'jpg', tif: 'tiff', markdown: 'md', htm: 'html' } as const satisfies Record<string, InputFormat>;
 export const inputExtensions: readonly string[] = [...Object.keys(inputRules), ...Object.keys(aliases)];
 export const supportedInputLabel = inputExtensions.map(extension => extension.toUpperCase()).join(', ');
 export const inputGroups = (Object.keys(categoryLabels) as FileCategory[]).map(category => ({
@@ -75,22 +63,30 @@ export function isCompatible(input: InputFormat, output: string): output is Outp
   return (outputFormats(input) as readonly string[]).includes(output);
 }
 
+export function isTextRoute(input: InputFormat, output: string): boolean {
+  return isTextInput(input) && ['md','html','txt'].includes(output) && input !== output;
+}
+export function isTextInput(input: InputFormat): boolean { return input === 'md' || input === 'html' || input === 'txt'; }
+export function isDocumentRoute(input: InputFormat, output: string): boolean {
+  return isTextRoute(input,output) || (isTextInput(input) && output === 'pdf') || (input === 'pdf' && ['txt','md','html','png','jpg'].includes(output));
+}
+
 export function outputGroups(input: InputFormat): { label: string; formats: readonly OutputFormat[] }[] {
   if (inputRules[input].category === 'video') {
     return [{ label: 'Video', formats: videoOutputs }, { label: 'Extract audio', formats: audioOutputs }];
   }
-  return [{ label: inputRules[input].category === 'audio' ? 'Audio' : inputRules[input].category === 'image' ? 'Image' : 'Planned outputs', formats: outputFormats(input) }];
+  return [{ label: inputRules[input].category === 'audio' ? 'Audio' : inputRules[input].category === 'image' ? 'Image' : 'Document', formats: outputFormats(input) }];
 }
 
 export function outputHelp(input: InputFormat, output: OutputFormat): string {
+  if (isTextInput(input)) return output === 'pdf' ? 'Paginated A4 PDF with an embedded font. Latin, Greek and Cyrillic text are supported where the font has glyphs; complex scripts, combining sequences and missing glyphs produce an error.' : 'Local UTF-8 output. Basic structure is preserved where supported; formatting may change.';
   if (input === 'pdf') {
-    return output === 'txt'
-      ? 'PDF-to-text will initially require a text-based PDF. Scanned documents need OCR, which is not offered.'
-      : 'PDF-to-image is planned to produce one image per page.';
+    return output === 'png' || output === 'jpg'
+      ? 'One image per selected page at 150 DPI, in a new output folder. JPEG uses a white background.'
+      : 'Reconstructed text with page boundaries. Original styling, exact tables and perfect reading order are not preserved. Scanned PDFs need OCR, which is not supported.';
   }
-  if (output === 'csv') return 'Spreadsheet-to-CSV may export only one sheet.';
   if (inputRules[input].category === 'video') return 'Choose a video format or extract audio from the video.';
   if (inputRules[input].category === 'audio') return 'Choose an audio output format.';
   if (inputRules[input].category === 'image') return 'Convert one still image. Dimensions are preserved after applying EXIF orientation.';
-  return `Choose a planned output for this ${categoryLabels[inputRules[input].category].toLowerCase()}.`;
+  return 'Choose an output format.';
 }
