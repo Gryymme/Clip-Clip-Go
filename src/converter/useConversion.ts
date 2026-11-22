@@ -1,3 +1,4 @@
+import {selectPdfs,startMergePdf,claimPdfDrop} from './native';
 import {initialSize,sizeError,sizePayload,type PageSize} from './pageSize';
 import { isDocumentRoute } from './formats';
 import { appendDroppedImages, addImages, moveImage, pageRangeError } from './pdf';
@@ -16,6 +17,7 @@ export function useConversion(selection: SelectionState, dispatch: Dispatch<Sele
   const [probe, setProbe] = useState<{ path: string; media: MediaInfo } | null>(null);
   const [pdfProbe, setPdfProbe] = useState<{path: string; info: PdfInfo} | null>(null);
   const [pdfPages, setPdfPages] = useState('');
+  const [mergeFiles, setMergeFiles] = useState<(NativeFile & {pages?:number; issue?:string})[]>([]);
   const [images, setImages] = useState<NativeFile[]>([]);
   const [pageSize, setPageSize] = useState<PageSize>('a4');
   const [customSize,setCustomSize] = useState(initialSize);
@@ -120,6 +122,35 @@ export function useConversion(selection: SelectionState, dispatch: Dispatch<Sele
     catch (cause) { setError(nativeError(cause)); }
     finally { operation.current = false; setStarting(false); }
   }
+  async function chooseMergeFiles(paths?:string[]) {
+    if (operation.current || busy || adding || probing || engineLoading || selection.selecting) return;
+    operation.current = true; setAdding(true); setError(null);
+    try {
+      const picked = paths ? await claimPdfDrop(paths) : {files:await selectPdfs() ?? [],rejected:[]};
+      const next = [...mergeFiles];
+      const rejected = [...picked.rejected];
+      for (const file of picked.files) {
+        if (next.some(f=>f.path.toLowerCase()===file.path.toLowerCase())) continue;
+        if (next.length >= 100) { rejected.push(`${file.name}: the 100-PDF limit has been reached.`); continue; }
+        try { const info = await probePdf(file.path); next.push({...file,pages:info.pages}); }
+        catch(cause) { next.push({...file,issue:nativeError(cause)}); }
+      }
+      setMergeFiles(next);
+      if(rejected.length) setError(rejected.join(' '));
+    } catch(cause) { setError(nativeError(cause)); }
+    finally { operation.current=false; setAdding(false); }
+  }
+  const mergePages = mergeFiles.reduce((n,f)=>n+(f.pages ?? 0),0);
+  const mergeSize = mergeFiles.reduce((n,f)=>n+Number(f.sizeBytes),0);
+  const mergeLimitError = mergePages>500 ? 'Merged PDF must contain at most 500 pages.' : mergeSize>128*1024*1024 ? 'Selected PDFs exceed the 128 MiB combined input limit.' : null;
+  const canMerge = mergeFiles.length>=2 && mergeFiles.every(f=>f.pages && !f.issue) && !mergeLimitError && !busy && !adding && !probing && !engineLoading && !selection.selecting;
+  async function startMerge() {
+    if(operation.current || !canMerge) return;
+    operation.current=true; setStarting(true); setError(null); dispatch({type:'lock',locked:true});
+    try { const next=await startMergePdf(mergeFiles.map(f=>f.path)); setJob(previous=>mergeJob(previous,next)); }
+    catch(cause) { setError(nativeError(cause)); }
+    finally { operation.current=false; setStarting(false); }
+  }
   async function cancel() {
     if (!job || !jobIsBusy(job) || cancelling) return;
     setCancelling(true); setError(null);
@@ -127,7 +158,10 @@ export function useConversion(selection: SelectionState, dispatch: Dispatch<Sele
     catch (cause) { setError(nativeError(cause)); }
     finally { setCancelling(false); }
   }
-  return { customSize,setCustomSize,pageSizeError,selectionError:setError, imagePreviews: imagePreviews.states, failImagePreview: imagePreviews.fail, engine, engineLoading, media, image, pdf, preview, pdfPages, setPdfPages, rangeError, outputIsFolder: pdfInput && (selection.output === 'png' || selection.output === 'jpg'), images, pageSize, setPageSize, adding, chooseImages, startImagePdf,
+  return { mergeFiles, mergePages, mergeLimitError, canMerge, chooseMergeFiles, startMerge,
+    removeMergeFile:(index:number)=>{if(!busy && !adding) setMergeFiles(previous=>previous.filter((_,i)=>i!==index));},
+    moveMergeFile:(index:number,direction:-1|1)=>{if(!busy && !adding) setMergeFiles(previous=>moveImage(previous,index,direction));},
+    customSize,setCustomSize,pageSizeError,selectionError:setError, imagePreviews: imagePreviews.states, failImagePreview: imagePreviews.fail, engine, engineLoading, media, image, pdf, preview, pdfPages, setPdfPages, rangeError, outputIsFolder: pdfInput && (selection.output === 'png' || selection.output === 'jpg'), images, pageSize, setPageSize, adding, chooseImages, startImagePdf,
     removeImage: (index: number) => { if (!busy && !adding) setImages(previous => previous.filter((_,i) => i !== index)); },
     moveImage: (index: number, direction: -1 | 1) => { if (!busy && !adding) setImages(previous => moveImage(previous,index,direction)); },
     probing, probeError, error, job, busy, starting, cancelling, formats, availability, canConvert, configure, start, cancel };

@@ -7,7 +7,7 @@ export function addImages(current: readonly NativeFile[], added: readonly Native
   if (result.length > 100) throw Error('Choose at most 100 images. Remove some before adding more.');
   return result;
 }
-export function moveImage(files: readonly NativeFile[], index: number, direction: -1 | 1): NativeFile[] {
+export function moveImage<T extends NativeFile>(files: readonly T[], index: number, direction: -1 | 1): T[] {
   const next = index + direction;
   if (index < 0 || index >= files.length || next < 0 || next >= files.length) return [...files];
   const result = [...files]; [result[index], result[next]] = [result[next], result[index]]; return result;

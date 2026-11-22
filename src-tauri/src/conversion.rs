@@ -933,6 +933,113 @@ pub fn start_images_pdf(
     Ok(job)
 }
 #[tauri::command]
+pub fn start_merge_pdf(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, Runtime>,
+    input_paths: Vec<String>,
+) -> Result<Job> {
+    state.previews.cancel_all();
+    if input_paths.len() < 2 || input_paths.len() > 100 {
+        return Err("Choose 2–100 PDFs.".into());
+    }
+    let core = state.core.clone();
+    let inputs = input_paths
+        .iter()
+        .map(|p| {
+            let path = core.authorize(p)?;
+            if !crate::pdf::is_input(&path) {
+                return Err(
+                    "Merge PDF accepts PDFs only.".into(),
+                );
+            }
+            Ok(path)
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let operation = core.reserve()?;
+    let id = core.sequence.fetch_add(1, Ordering::SeqCst) + 1;
+    let job = Job {
+        id,
+        revision: 0,
+        phase: JobPhase::ChoosingDestination,
+        input_path: format!("{} PDFs (visible list order)", inputs.len()),
+        destination: None,
+        format: OutputFormat::Pdf,
+        duration: None,
+        seconds: 0.0,
+        percent: None,
+        pages_done: Some(0),
+        pages_total: None,
+        message: "Choose a new PDF filename in the Save dialog.".into(),
+    };
+    core.inner.lock().unwrap().job = Some(job.clone());
+    std::thread::spawn(move || {
+        let result = (|| {
+            operation.control.check()?;
+            let chosen = window
+                .dialog()
+                .file()
+                .set_parent(&window)
+                .set_title("Save merged PDF without overwriting")
+                .set_file_name("merged.pdf")
+                .add_filter("PDF", &["pdf"])
+                .blocking_save_file()
+                .ok_or(CANCELLED)?
+                .into_path()
+                .map_err(|_| "Could not access that destination.")?;
+            let destination = destination_path(&inputs[0], &chosen, OutputFormat::Pdf)?;
+            core.update(id, |j| {
+                j.destination = Some(destination.to_string_lossy().into_owned());
+                if j.phase != JobPhase::Cancelling {
+                    j.phase = JobPhase::Running;
+                    j.message = "Validating PDF inputs…".into();
+                }
+            });
+            crate::pdf::merge_pdfs(
+                &inputs,
+                &destination,
+                &operation.control,
+                &mut |done, total| {
+                    core.update(id, |j| {
+                        if j.phase != JobPhase::Cancelling {
+                            j.pages_done = Some(done);
+                            j.pages_total = Some(total);
+                            j.percent = Some(f64::from(done) / f64::from(total) * 100.0);
+                            j.message = format!(
+                                "Processed page {done} of {total}. Validating before publication…"
+                            );
+                        }
+                    })
+                },
+                &mut |stage| core.update(id, |j| {
+                    if j.phase != JobPhase::Cancelling {
+                        j.percent = None;
+                        j.phase = if stage == "verifying" || stage == "publishing" { JobPhase::Verifying } else { JobPhase::Running };
+                        j.message = match stage { "writing" => "Writing merged PDF…", "verifying" => "Validating merged pages and dimensions…", _ => "Publishing validated PDF…" }.into();
+                    }
+                }),
+            )
+        })();
+        drop(operation);
+        core.update(id, |j| match result {
+            Ok(path) => {
+                j.phase = JobPhase::Succeeded;
+                j.destination = Some(path.to_string_lossy().into_owned());
+                j.percent = Some(100.0);
+                j.message = "PDF completed and page count validated.".into();
+            }
+            Err(message) => {
+                j.phase = if message == CANCELLED {
+                    JobPhase::Cancelled
+                } else {
+                    JobPhase::Failed
+                };
+                j.message = message;
+            }
+        });
+    });
+    Ok(job)
+}
+#[tauri::command]
 pub fn get_conversion_status(state: tauri::State<'_, Runtime>) -> Option<Job> {
     state.core.job()
 }

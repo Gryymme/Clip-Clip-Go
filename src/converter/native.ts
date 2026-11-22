@@ -32,3 +32,7 @@ export async function conversionStatus(): Promise<ConversionJob | null> { deskto
 export async function cancelConversion(id: number): Promise<void> { desktop(); return invoke('cancel_conversion', { id }); }
 
 export async function claimDrop(paths:string[],imagesOnly:boolean):Promise<{files:NativeFile[];rejected:string[]}> {desktop();return invoke('claim_drop',{paths,imagesOnly});}
+
+export async function selectPdfs(): Promise<NativeFile[] | null> { desktop(); return invoke('select_pdfs'); }
+export async function startMergePdf(inputPaths: string[]): Promise<ConversionJob> { desktop(); return invoke('start_merge_pdf', { inputPaths }); }
+export async function claimPdfDrop(paths: string[]): Promise<{files:NativeFile[];rejected:string[]}> { desktop(); return invoke('claim_drop', { paths, imagesOnly:false, pdfsOnly:true }); }

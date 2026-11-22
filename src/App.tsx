@@ -4,6 +4,7 @@ import { useDownloader } from './downloader/useDownloader';
 import Settings from './components/Settings';
 import {useCompanion} from './companion/useCompanion';
 import Converter from './converter/Converter';
+import MergePdf from './converter/MergePdf';
 import ImagesToPdf from './converter/ImagesToPdf';
 import AppShell from './components/AppShell';
 import { pages, isConversionPage, type PageName } from './navigation';
@@ -30,6 +31,7 @@ export default function App() {
     {activePage === 'Downloader' ? <Downloader controller={download} companion={companion} onBrowserSetup={()=>setActivePage('Settings')} />
       : activePage === 'Converter' ? <Converter state={selection} dispatch={dispatchSelection} busy={selectionBusy} conversion={conversion} />
       : activePage === 'Images to PDF' ? <ImagesToPdf conversion={conversion} selecting={selection.selecting} />
+      : activePage === 'Merge PDF' ? <MergePdf conversion={conversion} selecting={selection.selecting} />
       : activePage === 'Settings' ? <Settings companion={companion} /> : <section className="placeholder" aria-labelledby="placeholder-title"><h2 id="placeholder-title">Not implemented yet</h2><p>{page.description}</p></section>}
     {!isConversionPage(activePage) && jobIsBusy(conversion.job) && <JobStatus controller={conversion} />}
     {activePage !== 'Downloader' && download.busy && <DownloadStatus controller={download} />}

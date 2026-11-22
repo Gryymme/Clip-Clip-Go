@@ -1,4 +1,5 @@
 // Pure presentation state, also exercised by headless fixtures.
+export function connectionView(connection,connecting=false){const connected=connection?.ok===true&&connection?.code==='connected';return {connectHidden:connected&&!connecting,disconnectHidden:!connected||connecting,disabled:connecting,label:connecting?'Connecting…':'Connect'};}
 export function detectionView(state) {
   if(!state.ok)return {message:state.message||'Open a normal HTTP(S) tab outside Incognito.',action:'Activate this tab',disabled:true};
   const messages={

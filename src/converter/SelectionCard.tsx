@@ -3,8 +3,8 @@ import {isTauri} from '@tauri-apps/api/core';
 import {getCurrentWebview} from '@tauri-apps/api/webview';
 import Icon, {type IconName} from '../components/Icon';
 import {insideDrop,dropError} from './drop';
-export function EmptySelectionCard({title,description,actions,children,icon='document'}:{title:string;description:string;actions:ReactNode;children?:ReactNode;icon?:IconName}) {
- return <div className="file-summary file-empty"><div className="file-preview"><Icon name={icon} /></div><div className="file-summary-content"><h3>{title}</h3><p className="field-help">{description}</p>{children}</div><div className="file-summary-actions">{actions}</div></div>;
+export function EmptySelectionCard({title,description,actions,children,icon='document'}:{title:string;description?:string;actions:ReactNode;children?:ReactNode;icon?:IconName}) {
+ return <div className="file-summary file-empty"><div className="file-preview"><Icon name={icon} /></div><div className="file-summary-content"><h3>{title}</h3>{description&&<p className="field-help">{description}</p>}{children}</div><div className="file-summary-actions">{actions}</div></div>;
 }
 export function DropSelection({children,multiple,locked,onDrop,onError}:{children:ReactNode;multiple:boolean;locked:boolean;onDrop:(paths:string[])=>Promise<void>;onError:(message:string)=>void}) {
  const ref=useRef<HTMLDivElement>(null),current=useRef({locked,onDrop,onError});current.current={locked,onDrop,onError};

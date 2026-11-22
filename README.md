@@ -6,7 +6,7 @@ Clip-Clip-Go is a Windows desktop application combining single-link media downlo
 
 The optional **ClipClipGO browser companion** adds user-activated Chrome media discovery and Native Messaging handoff. Select a detected HTTP file/HLS/DASH source; the app inspects that media URL directly and reuses the source/output workflow. Download still requires confirmation in ClipClipGO. Website access is optional and origin-scoped; some frames/CDNs need separate grants. No cookies, Authorization headers, browser cache or credentials are imported. Detection does not guarantee download or universal site support.
 
-Settings and Downloader offer **Install browser extension** with a supported **Load unpacked** path: open/copy `chrome://extensions/`, enable Developer mode, select the app’s `extension` folder, paste Chrome’s actual extension ID into ClipClipGO, and choose **Connect / Finish setup**. Then open the extension popup and click **Connect**. No PowerShell registration is required. The app resolves its actual install folder (including custom/per-user installs); debug builds identify their project fallback when needed. Setup writes only the owned per-user bridge; **Connected** requires a real handshake. No store listing is currently configured. See [Browser companion setup](docs/browser-companion.md) for removal, permissions and verification limits.
+Settings offers **Extension Installation Guide** (also reachable from Downloader’s **Browser companion setup**) with a supported **Load unpacked** path: open/copy `chrome://extensions/`, enable Developer mode, select the app’s `extension` folder, paste Chrome’s actual extension ID into ClipClipGO, and choose **Connect / Finish setup**. Then open the extension popup and click **Connect**. No PowerShell registration is required. The app resolves its actual install folder (including custom/per-user installs); debug builds identify their project fallback when needed. Setup writes only the owned per-user bridge; **Connected** requires a real handshake. No store listing is currently configured. See [Browser companion setup](docs/browser-companion.md) for removal, permissions and verification limits.
 
 Choose **Activate this tab** before playback in each additional tab. Same-origin navigation clears old sources while retaining that tab’s activation for its original 10-minute timeout; changing origin requires activation again. The popup provides missing-frame permission actions and a CDN-origin grant/rescan. Sending a source or losing the desktop connection does not stop discovery.
 
@@ -48,6 +48,7 @@ See [Downloader implementation, correction evidence and manual checklist](docs/d
 | HTML (.html/.htm) | TXT, Markdown, PDF |
 | PDF | TXT, Markdown, HTML, PNG page images, JPEG page images |
 | Multiple supported still images, on Images to PDF | One PDF in the visible list order |
+| Multiple PDFs, on Merge PDF | One PDF containing all pages in the visible file order |
 
 Extension matching is case-insensitive. Markdown output uses `.md`, HTML uses `.html`, and JPEG uses `.jpg`. Identical-format document conversions are not offered. Microsoft Office and OpenDocument formats, including DOC/DOCX, RTF, XLS/XLSX, PPT/PPTX, ODT, ODS and ODP, are unsupported. **LibreOffice and optional Office installation are permanently cancelled.** The short historical decision is in [docs/office-runtime.md](docs/office-runtime.md).
 
@@ -55,7 +56,7 @@ Select files with native dialogs or drop supported local files onto the selectio
 
 ## Navigation and file previews
 
-The sidebar displays **ClipClipGO** and provides Downloader, Converter, Images to PDF, Queue, History and Settings. **Converter** opens the single-file workflow; **Images to PDF** has its own page. Navigation retains both workflows' selections and options, and an active conversion remains visible and cancellable across pages. Project and application identifiers are unchanged.
+The sidebar displays **ClipClipGO** and provides Downloader, Converter, Images to PDF, Merge PDF, Queue, History and Settings. **Converter** opens the single-file workflow; **Images to PDF** and **Merge PDF** have their own pages. Navigation retains selections and options, and an active conversion remains visible and cancellable across pages. Project and application identifiers are unchanged.
 
 The full-height sidebar is attached to the left edge and stays in place while the workspace scrolls. Short windows scroll navigation internally; narrow layouts move it above the workspace. Locally bundled Montserrat, shared controls and distinct keyboard focus are used throughout. Full paths and detailed engine information are expandable rather than dominating the workspace. The centered brand has a blue GO; the dynamic-year GRYYMME © attribution is anchored at the sidebar bottom. Decorative borders are subtle, while input boundaries and keyboard focus stay distinct.
 
@@ -92,6 +93,14 @@ An image-only/no-extractable-text PDF produces an OCR-not-supported explanation;
 Choose PNG or JPEG and leave Pages blank for all pages, or enter a validated range such as `1-3, 5`. Duplicates are removed and results follow document order. Rendering uses **150 DPI**, respects page rotation/aspect ratio and produces white-background images, including JPEG quality 90.
 
 In the Save dialog, enter a **new output folder name**. Ordered files such as `document-page-001.png` are rendered sequentially in a job-owned staging directory. Every page is decoded again to validate its format/dimensions. Only the completed folder is published, without replacing an existing folder. Cancellation/failure removes the job's staging folder. Progress reports actual completed page counts.
+
+### Merge PDF
+
+Choose or drop 2–100 PDFs on **Merge PDF**. Add more files, remove entries or use keyboard-accessible Move up/Move down controls. Duplicate paths are ignored. Filenames, sizes and available page counts appear in the ordered list; selections and order survive navigation for the session. Invalid/encrypted entries display errors and block merging until removed. Rejected drop items are reported. Choose a new filename and folder in the native Save dialog.
+
+The bundled PDFium imports complete source page ranges with cross-document resource/reference remapping, without rasterizing pages or reconstructing text. Page dimensions and rotation are retained. Generated fixtures verify page count, order, extracted text, shared fonts/Form XObjects, annotations and matching rendered content across different page sizes/orientations. Basic page annotations and direct URI links are retained in the generated fixtures. Direct internal page-link destinations are dropped by the current PDFium import even when the link annotation survives. Named/complex links, interactive forms, bookmarks, attachments, layers, accessibility tags, metadata and digital signatures are **not guaranteed**. Merging creates a new document; signatures must not be treated as valid. Review important merged documents in your PDF viewer.
+
+Merge limits: 128 MiB combined input, 128 MiB output and 500 combined pages. Encrypted/password-protected, missing, unreadable and unsupported files fail the operation; files/pages are never intentionally skipped. Processing invokes no PDF actions and fetches no remote resources; this is not an active-content sanitizer for later PDF viewers. Merge uses the shared one-job slot, page-import progress and indeterminate writing/validation stages. Cancellation waits for the current native load/import/save call, then cleans owned temporary files. Output is staged beside the destination, reopened and checked for page count/dimensions before protected publication; existing outputs and all inputs are protected, including publication races. No dependency or external runtime was added.
 
 ### Images to PDF
 

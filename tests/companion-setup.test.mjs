@@ -2,8 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile,readdir} from 'node:fs/promises';
 import {hostBuildOptions} from '../scripts/build-companion.mjs';
-import {detectionView} from '../browser-companion/extension/popup-state.js';
+import {detectionView,connectionView} from '../browser-companion/extension/popup-state.js';
 import {extensionIdError} from '../src/companion/types.ts';
+test('connection controls require a current handshake and disable repeated attempts',()=>{
+ assert.equal(connectionView({ok:true,code:'connected'}).connectHidden,true);
+ assert.equal(connectionView({ok:true,code:'connected'}).disconnectHidden,false);
+ for(const state of [null,{extensionId:'saved'},{ok:false,code:'disconnected'},{ok:false,code:'rejected'},{ok:true,code:'unknown'}]){assert.equal(connectionView(state).connectHidden,false);assert.equal(connectionView(state).disconnectHidden,true);}
+ assert.deepEqual(connectionView({ok:true,code:'connected'},true),{connectHidden:false,disconnectHidden:true,disabled:true,label:'Connecting…'});
+});
 test('ID input and actionable detection states distinguish authorization from connection',()=>{
  for(const id of ['', 'not-an-id','abcdefghijklmnopabcdefghijklmnop;cmd','ABCDEFGHIJKLMNOPABCDEFGHIJKLMNOP','qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq'])assert.ok(extensionIdError(id));
  assert.equal(extensionIdError(' abcdefghijklmnopabcdefghijklmnop '),null);

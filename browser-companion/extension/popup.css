@@ -34,6 +34,7 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid
 .candidate:has(:checked){outline:2px solid var(--focus);outline-offset:-2px}
 #result:empty{display:none}#result{padding-block:8px}#missing{color:var(--text)}
 details>button{margin-block-start:8px}summary{cursor:pointer;font-weight:600}
+.privacy-actions{display:flex;flex-wrap:wrap;gap:12px;margin-block-start:12px}
 input[type=url]{width:100%;min-width:0;padding:10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)}
 label[for=origin]{display:block;margin-block:8px}
 [hidden]{display:none!important}

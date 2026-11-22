@@ -682,6 +682,104 @@ pub fn images_to_pdf(
     output.publish()
 }
 
+/// Import complete page trees with PDFium's cross-document object remapping.
+/// No rendering, text reconstruction, form events or document actions are run.
+pub fn merge_pdfs(
+    inputs: &[PathBuf],
+    chosen: &Path,
+    control: &Control,
+    progress: &mut dyn FnMut(u16, u16),
+    stage: &mut dyn FnMut(&str),
+) -> Result<PathBuf> {
+    if !(2..=100).contains(&inputs.len()) {
+        return Err("Choose between 2 and 100 PDFs.".into());
+    }
+    for input in inputs {
+        if !is_input(input) { return Err("Merge PDF accepts PDF files only.".into()); }
+        // Check every input, including aliases of the chosen destination.
+        crate::conversion::destination_path(input, chosen, OutputFormat::Pdf)?;
+    }
+    let _lock = SERIAL.lock().unwrap();
+    control.check()?;
+    let pdf = library()?;
+    let mut sources = Vec::new();
+    let mut dimensions = Vec::new();
+    let mut bytes = 0u64;
+    for input in inputs {
+        control.check()?;
+        let result = (|| {
+            bytes = bytes.checked_add(std::fs::metadata(input).map_err(err)?.len()).ok_or("PDF size overflow.")?;
+            if bytes > MAX_PDF { return Err("Selected PDFs exceed the 128 MiB combined input limit.".into()); }
+            let loaded = load(pdf, input);
+            control.check()?;
+            let source = loaded?;
+            if dimensions.len() + source.pages().len() as usize > usize::from(MAX_PAGES) {
+                return Err("Merged PDF would exceed 500 pages.".into());
+            }
+            // Explicit indexed access: an unreadable page must fail, never disappear.
+            for index in source.pages().as_range() {
+                control.check()?;
+                let page = source.pages().get(index).map_err(err)?;
+                let size = (page.width().value, page.height().value, page.rotation().map_err(err)?);
+                if !size.0.is_finite() || !size.1.is_finite() || size.0 <= 0.0 || size.1 <= 0.0 {
+                    return Err(format!("Page {} has invalid dimensions.", index + 1));
+                }
+                dimensions.push(size);
+            }
+            sources.push(source);
+            Ok(())
+        })();
+        result.map_err(|e: String| {
+            if e == crate::process::CANCELLED { e } else {
+                format!("{}: {e}", input.file_name().unwrap_or_default().to_string_lossy())
+            }
+        })?;
+    }
+    let count = dimensions.len() as u16;
+    progress(0, count);
+    let mut doc = pdf.create_new_pdf().map_err(err)?;
+    let mut done = 0;
+    for (input, source) in inputs.iter().zip(&sources) {
+        control.check()?;
+        // Import each source in one operation so its shared resources and page
+        // references are remapped together, rather than copied as raw object IDs.
+        let imported = doc.pages_mut().append(source);
+        control.check()?;
+        imported.map_err(|e| format!("{}: {}", input.display(), err(e)))?;
+        done += source.pages().len() as u16;
+        if doc.pages().len() != i32::from(done) { return Err("PDF page import was incomplete. Nothing was saved.".into()); }
+        progress(done, count);
+    }
+    control.check()?;
+    stage("writing");
+    let mut output = stage_output(&inputs[0], chosen, OutputFormat::Pdf, control)?;
+    let mut file = output.file.take().ok_or("Missing PDF staging handle.")?;
+    let saved = doc.save_to_writer(&mut file);
+    control.check()?;
+    saved.map_err(err)?;
+    file.flush().map_err(err)?;
+    file.sync_all().map_err(err)?;
+    drop(file);
+    drop(doc);
+    drop(sources);
+    control.check()?;
+    stage("verifying");
+    control.check()?;
+    if std::fs::metadata(&output.path).map_err(err)?.len() > MAX_PDF { return Err("Merged PDF exceeds the 128 MiB output limit.".into()); }
+    let verified = load(pdf, &output.path)?;
+    if verified.pages().len() != i32::from(count) { return Err("Merged PDF page count did not match. Nothing was saved.".into()); }
+    for (index, expected) in dimensions.iter().enumerate() {
+        control.check()?;
+        let page = verified.pages().get(index as i32).map_err(err)?;
+        if (page.width().value - expected.0).abs() > 0.01 || (page.height().value - expected.1).abs() > 0.01 || page.rotation().map_err(err)? != expected.2 {
+            return Err("Merged PDF page dimensions or rotation did not match. Nothing was saved.".into());
+        }
+    }
+    drop(verified);
+    stage("publishing");
+    output.publish()
+}
+
 #[cfg(windows)]
 fn publish_directory(from: &Path, to: &Path) -> Result<()> {
     use std::os::windows::ffi::OsStrExt;

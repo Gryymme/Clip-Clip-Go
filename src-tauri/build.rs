@@ -111,6 +111,8 @@ fn main() {
             "cancel_preview",
             "probe_pdf",
             "select_images",
+            "select_pdfs",
+            "start_merge_pdf",
             "claim_drop",
             "start_images_pdf",
             "start_conversion",

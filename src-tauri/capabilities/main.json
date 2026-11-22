@@ -25,6 +25,8 @@
     "allow-cancel-preview",
     "allow-select-media-file",
     "allow-select-images",
+    "allow-select-pdfs",
+    "allow-start-merge-pdf",
     "allow-probe-pdf",
     "allow-start-images-pdf",
     "allow-configure-engines",

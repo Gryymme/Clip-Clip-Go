@@ -1,8 +1,8 @@
 import {httpUrl, originPattern} from './model.js';
 import {renderCandidates} from './popup-view.js';
-import {detectionView} from './popup-state.js';
+import {detectionView,connectionView} from './popup-state.js';
 const $ = id => document.getElementById(id);
-let selected = null, sending = false, tabUrl = null,refreshing=false,listSignature='',frameSignature='';
+let selected = null, sending = false, connecting=false, tabUrl = null,refreshing=false,listSignature='',frameSignature='';
 const call = message => chrome.runtime.sendMessage(message);
 function result(text) { $('result').textContent = text || ''; }
 async function refresh() {
@@ -12,7 +12,7 @@ async function refresh() {
     $('start').textContent=view.action;$('start').disabled=view.disabled;
     $('tab-host').textContent=s.tab?.host||'Unsupported tab';tabUrl=s.tab?`${s.tab.origin}/`:null;
     if(s.connection)$('connection').textContent = s.connection.message;
-    $('disconnect').hidden=!s.connection?.ok;
+    const controls=connectionView(s.connection,connecting);$('connect').hidden=controls.connectHidden;$('connect').disabled=controls.disabled;$('connect').textContent=controls.label;$('disconnect').hidden=controls.disconnectHidden;
     const candidates = s.session?.candidates || [];
     if (!candidates.some(c => c.id === selected&&!c.drm)) selected = candidates.find(c=>!c.drm)?.id ?? null;
     const signature=JSON.stringify([candidates,selected]);if(signature!==listSignature){renderCandidates($('list'), candidates, selected, id => { selected = id; $('send').disabled = sending || !selected; });listSignature=signature;}
@@ -27,7 +27,7 @@ async function refresh() {
 }
 $('start').onclick = async () => { try { const pattern = originPattern(tabUrl); if (!pattern) throw Error(); if (!await chrome.permissions.request({origins: [pattern]})) { result('Website access was not granted.'); return; } const r = await call({type: 'start'}); result(r.message); await refresh(); } catch { result('Detection could not start on this page.'); } };
 $('stop').onclick = async () => { await call({type: 'stop'}); await refresh(); };
-$('connect').onclick = async () => { $('connect').disabled = true;$('connect').textContent='Connecting…';try { const r = await call({type: 'check'}); result(r.message); await refresh(); }catch{result('Connection failed. Finish setup in ClipClipGO, then retry Connect. Detection remains active.');} finally { $('connect').disabled = false;$('connect').textContent='Connect'; } };
+$('connect').onclick = async () => { if(connecting)return;connecting=true;$('connect').disabled = true;$('connect').textContent='Connecting…';try { const r = await call({type: 'check'}); result(r.message); }catch{result('Connection failed. Finish setup in ClipClipGO, then retry Connect. Detection remains active.');} finally { connecting=false;await refresh(); } };
 $('disconnect').onclick=async()=>{await call({type:'disconnect'});await refresh();};
 $('scan').onclick=async()=>{await call({type:'scan'});result('Rescanned permitted frames. Restart playback if the network request already happened.');await refresh();};
 $('allow').onclick = async () => { const value = httpUrl($('origin').value.trim()); if (!value || new URL(value).pathname !== '/' || new URL(value).search || new URL(value).hash) { result('Enter an HTTP(S) origin, such as https://cdn.example.com.'); return; } if (await chrome.permissions.request({origins: [originPattern(value)]})) { await call({type: 'scan'}); result('Origin allowed. Restart playback if the request already happened.'); } else result('Origin access was not granted.'); };

@@ -80,6 +80,49 @@ pub async fn select_images(
     .map_err(|_| SelectionError::MetadataError)?
 }
 
+#[tauri::command]
+pub async fn select_pdfs(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, crate::conversion::Runtime>,
+) -> Result<Option<Vec<MediaFile>>, SelectionError> {
+    let core = state.core.clone();
+    if core.busy() {
+        return Err(SelectionError::Busy);
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let chosen = window
+            .dialog()
+            .file()
+            .set_parent(&window)
+            .set_title("Add PDFs to merge (maximum 100)")
+            .add_filter(
+                "PDF",
+                &["pdf"],
+            )
+            .blocking_pick_files();
+        chosen
+            .map(|files| {
+                if files.len() > 100 {
+                    return Err(SelectionError::MetadataError);
+                }
+                files
+                    .into_iter()
+                    .map(|file| {
+                        let path = file
+                            .into_path()
+                            .map_err(|_| SelectionError::MetadataError)?;
+                        let info = file_metadata(&path)?;
+                        core.remember(&path);
+                        Ok(info)
+                    })
+                    .collect()
+            })
+            .transpose()
+    })
+    .await
+    .map_err(|_| SelectionError::MetadataError)?
+}
+
 // No caller-supplied file path: stat only the file chosen in this native dialog.
 #[tauri::command]
 pub async fn select_media_file(
@@ -215,15 +258,26 @@ pub async fn claim_drop(
     state: tauri::State<'_, crate::conversion::Runtime>,
     paths: Vec<std::path::PathBuf>,
     images_only: bool,
+    pdfs_only: Option<bool>,
 ) -> Result<DropResult, String> {
     consume_drop(
         &mut state.drops.lock().unwrap(),
         &paths,
-        images_only,
+        images_only || pdfs_only.unwrap_or(false),
         state.core.busy(),
     )?;
     let core = state.core.clone();
-    tauri::async_runtime::spawn_blocking(move || inspect_drop(paths, images_only, &core))
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut result = inspect_drop(paths, images_only, &core);
+        if pdfs_only.unwrap_or(false) {
+            result.files.retain(|file| {
+                if crate::pdf::is_input(Path::new(&file.path)) { true } else {
+                    result.rejected.push(format!("{}: Merge PDF accepts PDFs only.", file.name)); false
+                }
+            });
+        }
+        result
+    })
         .await
         .map_err(|_| "File metadata could not be read.".to_string())
 }

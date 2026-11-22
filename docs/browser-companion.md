@@ -4,7 +4,7 @@ The independently developed Chrome Manifest V3 companion complements pasted-link
 
 ## Supported unpacked setup
 
-1. Open ClipClipGO → Settings → **Install browser extension** (also reachable from Downloader).
+1. Open ClipClipGO → Settings → **Extension Installation Guide** (also reachable from Downloader).
 2. Choose **Open Extensions page**, or **Copy address** and paste `chrome://extensions/` into Chrome. Enable **Developer mode** yourself.
 3. Choose **Load unpacked** in Chrome and select the folder displayed in ClipClipGO. **Open extension folder** and **Copy folder path** help locate it.
 4. Copy the actual extension ID shown by Chrome and paste it into ClipClipGO. Choose **Connect / Finish setup**. No PowerShell command is required.

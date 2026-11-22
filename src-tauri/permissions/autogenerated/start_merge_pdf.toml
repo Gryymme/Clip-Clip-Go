@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-start-merge-pdf"
+description = "Enables the start_merge_pdf command without any pre-configured scope."
+commands.allow = ["start_merge_pdf"]
+
+[[permission]]
+identifier = "deny-start-merge-pdf"
+description = "Denies the start_merge_pdf command without any pre-configured scope."
+commands.deny = ["start_merge_pdf"]

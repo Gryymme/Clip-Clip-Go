@@ -5,6 +5,120 @@ fn work() -> tempfile::TempDir {
     tempfile::tempdir_in(root).unwrap()
 }
 fn quiet(_: u16, _: u16) {}
+
+// Real PDF objects with inherited/shared resources, colliding object IDs across
+// documents, rotated pages, URI and same-document page links. No fixture tools.
+fn merge_fixture(path: &Path, marker: &str, font: &str) {
+    let stream = |s: String| format!("<< /Length {} >>\nstream\n{s}\nendstream", s.len());
+    let objects = vec![
+        "<< /Type /Catalog /Pages 2 0 R >>".into(),
+        "<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 /Resources << /Font << /F1 5 0 R >> /XObject << /Mark 8 0 R >> >> >>".into(),
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 450] /Contents 6 0 R /Annots [9 0 R 10 0 R] >>".into(),
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 620 340] /Rotate 90 /Contents 7 0 R >>".into(),
+        format!("<< /Type /Font /Subtype /Type1 /BaseFont /{font} >>"),
+        stream(format!("BT /F1 20 Tf 20 200 Td ({marker} One) Tj ET q /Mark Do Q")),
+        stream(format!("BT /F1 20 Tf 20 200 Td ({marker} Two) Tj ET q /Mark Do Q")),
+        { let s="0.2 0.5 0.8 rg 20 20 100 100 re f"; format!("<< /Type /XObject /Subtype /Form /BBox [0 0 200 200] /Length {} >>\nstream\n{s}\nendstream",s.len()) },
+        "<< /Type /Annot /Subtype /Link /Rect [20 180 180 220] /A << /S /URI /URI (https://example.test/pdf) >> >>".into(),
+        "<< /Type /Annot /Subtype /Link /Rect [20 140 180 170] /Dest [4 0 R /Fit] >>".into(),
+    ];
+    let mut data=String::from("%PDF-1.7\n");
+    let mut offsets=Vec::new();
+    for (i,obj) in objects.iter().enumerate() { offsets.push(data.len()); data.push_str(&format!("{} 0 obj\n{obj}\nendobj\n",i+1)); }
+    let xref=data.len();
+    data.push_str(&format!("xref\n0 {}\n0000000000 65535 f \n",objects.len()+1));
+    for offset in offsets { data.push_str(&format!("{offset:010} 00000 n \n")); }
+    data.push_str(&format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF",objects.len()+1));
+    std::fs::write(path,data).unwrap();
+}
+
+#[test]
+fn merge_retains_order_sizes_rotation_content_shared_resources_and_annotations() {
+    let dir=work();
+    let a=dir.path().join("alpha.pdf"); let b=dir.path().join("beta.PDF");
+    merge_fixture(&a,"Alpha","Helvetica"); merge_fixture(&b,"Beta","Courier");
+    let out=dir.path().join("merged.pdf"); let control=Control::default();
+    let mut progress=Vec::new();
+    merge_pdfs(&[b.clone(),a.clone()],&out,&control,&mut |n,t|progress.push((n,t)),&mut |_|{}).unwrap();
+    assert_eq!(progress,vec![(0,4),(2,4),(4,4)]);
+    let _lock=SERIAL.lock().unwrap(); let pdf=library().unwrap(); let merged=load(pdf,&out).unwrap();
+    assert_eq!(merged.pages().len(),4);
+    for (offset,path,marker) in [(0,&b,"Beta"),(2,&a,"Alpha")] {
+        let source=load(pdf,path).unwrap();
+        for i in 0..2 {
+            let original=source.pages().get(i).unwrap(); let page=merged.pages().get(offset+i).unwrap();
+            assert_eq!(page.width(),original.width()); assert_eq!(page.height(),original.height());
+            assert_eq!(page.rotation().unwrap(),original.rotation().unwrap());
+            assert!(page.text().unwrap().all().contains(&format!("{marker} {}",if i==0 {"One"} else {"Two"})));
+            assert_eq!(page.annotations().len(),original.annotations().len());
+            if i==0 {
+                let links=page.links();
+                let action=links.get(0).unwrap().action().unwrap();
+                match action {
+                    PdfAction::Uri(uri)=>assert_eq!(uri.uri().unwrap(),"https://example.test/pdf"),
+                    _=>panic!("Direct URI link was not retained"),
+                }
+                // PDFium retains this annotation but drops its page destination.
+                // Keep this known limitation explicit rather than claiming link fidelity.
+                assert_eq!(original.links().get(1).unwrap().destination().unwrap().page_index().unwrap(),1);
+                assert!(links.get(1).unwrap().destination().is_none());
+            }
+            // Compare actual rendering: catches broken imported fonts, streams,
+            // inherited resources and Form XObject cross-document references.
+            let render=|p:&PdfPage| p.render_with_config(&PdfRenderConfig::new().set_target_width(300)).unwrap().as_image().unwrap().to_rgb8();
+            assert_eq!(render(&page),render(&original));
+        }
+    }
+}
+
+#[test]
+fn merge_invalid_inputs_collisions_limits_cancellation_and_cleanup() {
+    let dir=work(); let a=dir.path().join("a.pdf"); let b=dir.path().join("b.pdf");
+    merge_fixture(&a,"Alpha","Helvetica"); merge_fixture(&b,"Beta","Courier");
+    let inputs=vec![a.clone(),b.clone()]; let original=std::fs::read(&b).unwrap();
+    let merge=|paths:&[PathBuf],output:&Path,c:&Control|merge_pdfs(paths,output,c,&mut quiet,&mut |_|{});
+    let out=dir.path().join("out.pdf");
+    assert!(merge(&[a.clone()],&out,&Control::default()).is_err());
+    assert!(merge(&inputs,&b,&Control::default()).is_err());
+    assert_eq!(std::fs::read(&b).unwrap(),original);
+    std::fs::write(&out,b"existing").unwrap();
+    assert!(merge(&inputs,&out,&Control::default()).is_err());
+    assert_eq!(std::fs::read(&out).unwrap(),b"existing");
+    let bad=dir.path().join("bad.pdf"); std::fs::write(&bad,b"not a PDF").unwrap();
+    let failed=dir.path().join("failed.pdf");
+    for invalid in [bad.clone(),dir.path().join("missing.pdf")] {
+        assert!(merge(&[a.clone(),invalid],&failed,&Control::default()).is_err()); assert!(!failed.exists());
+    }
+    assert!(merge(&vec![a.clone();101],&failed,&Control::default()).is_err());
+    assert!(merge(&vec![a.clone();100],&failed,&Control::default()).is_ok());
+    // A valid source expanded beyond the combined page budget must fail whole.
+    let over_limit=dir.path().join("over-limit.pdf");
+    assert!(merge(&vec![failed.clone();3],&over_limit,&Control::default()).unwrap_err().contains("500"));
+    assert!(!over_limit.exists());
+    let large=dir.path().join("large.pdf");
+    std::fs::File::create(&large).unwrap().set_len(MAX_PDF).unwrap();
+    assert!(merge(&[a.clone(),large],&over_limit,&Control::default()).unwrap_err().contains("128 MiB"));
+    for boundary in ["writing","verifying","publishing"] {
+        let cancelled=dir.path().join(format!("cancel-{boundary}.pdf")); let c=Control::default();
+        assert_eq!(merge_pdfs(&inputs,&cancelled,&c,&mut quiet,&mut |stage|if stage==boundary {c.cancel()}).unwrap_err(),crate::process::CANCELLED);
+        assert!(!cancelled.exists());
+        assert!(!std::fs::read_dir(dir.path()).unwrap().any(|e|e.unwrap().file_name().to_string_lossy().starts_with(".clip-clip-go-")));
+    }
+    let c=Control::default(); let cancelled=dir.path().join("cancel-import.pdf");
+    assert_eq!(merge_pdfs(&inputs,&cancelled,&c,&mut |n,_|if n>0 {c.cancel()},&mut |_|{}).unwrap_err(),crate::process::CANCELLED);
+    assert!(!cancelled.exists());
+    // Destination created after staging must survive publication unchanged.
+    let race=dir.path().join("race.pdf");
+    assert!(merge_pdfs(&inputs,&race,&Control::default(),&mut quiet,&mut |s|if s=="publishing" {std::fs::write(&race,b"rival").unwrap()}).is_err());
+    assert_eq!(std::fs::read(&race).unwrap(),b"rival");
+    let invalid_output=dir.path().join("invalid-output.pdf");
+    assert!(merge_pdfs(&inputs,&invalid_output,&Control::default(),&mut quiet,&mut |s|if s=="verifying" {
+        let stage=std::fs::read_dir(dir.path()).unwrap().map(|e|e.unwrap().path()).find(|p|p.file_name().unwrap().to_string_lossy().starts_with(".clip-clip-go-")).unwrap();
+        std::fs::write(stage,b"corrupt staged output").unwrap();
+    }).is_err());
+    assert!(!invalid_output.exists());
+    assert!(!std::fs::read_dir(dir.path()).unwrap().any(|e|e.unwrap().file_name().to_string_lossy().starts_with(".clip-clip-go-")));
+}
 fn fixture(path: &Path, color: [u8; 4], w: u32, h: u32) {
     image::RgbaImage::from_pixel(w, h, image::Rgba(color))
         .save(path)
@@ -269,6 +383,11 @@ fn corrupt_encrypted_and_image_validation() {
     assert!(inspect(&encrypted, &Control::default())
         .unwrap_err()
         .contains("password"));
+    let valid=dir.path().join("valid.pdf");
+    merge_fixture(&valid,"Valid","Helvetica");
+    let merged=dir.path().join("encrypted-merged.pdf");
+    assert!(merge_pdfs(&[valid,encrypted],&merged,&Control::default(),&mut quiet,&mut |_|{}).unwrap_err().contains("password"));
+    assert!(!merged.exists());
     let bad = dir.path().join("bad.png");
     std::fs::write(&bad, b"not image").unwrap();
     assert!(images_to_pdf(

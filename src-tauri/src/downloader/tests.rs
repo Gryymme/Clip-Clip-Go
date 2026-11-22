@@ -25,6 +25,46 @@ fn metadata() -> Media {
 }
 
 #[test]
+fn incomplete_metadata_summary_distinguishes_unknown_from_confirmed_encoding() {
+    let e = engines();
+    let mut s = settings();
+    for origin in [
+        "https://page.example.test/watch",
+        "https://cdn.example.test/direct",
+    ] {
+        let m = metadata::parse(
+            br#"{"format_id":"combined","ext":"mp4","url":"https://cdn.example.test/direct"}"#,
+            origin,
+        )
+        .unwrap();
+        let p = plan::build(&m, &s, &e).unwrap();
+        assert!(p.uncertain);
+        assert_eq!(p.summary, "Output: MP4");
+        assert!(p.conversion, "Conservative execution must remain intact");
+        s.quality = "high".into();
+        assert!(plan::build(&m, &s, &e)
+            .unwrap()
+            .summary
+            .contains("conversion required"));
+        s.quality = "preserve".into();
+    }
+    let mut m = metadata();
+    m.formats.retain(|f| f.id == "lower");
+    m.formats[0].height = None;
+    m.formats[0].fps = None;
+    let p = plan::build(&m, &s, &e).unwrap();
+    assert!(!p.conversion);
+    assert!(p.summary.contains("stream copy / remux"));
+    assert!(!p.summary.contains("resolution"));
+    s.format = "webm".into();
+    assert!(plan::build(&m, &s, &e)
+        .unwrap()
+        .summary
+        .contains("conversion required"));
+    s.format = "invalid".into();
+    assert!(plan::build(&m, &s, &e).is_err());
+}
+#[test]
 fn metadata_missing_fields_and_boundaries() {
     let m = metadata();
     assert_eq!(m.formats[0].vcodec.as_deref(), Some("h264"));

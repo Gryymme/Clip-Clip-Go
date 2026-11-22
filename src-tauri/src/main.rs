@@ -61,6 +61,8 @@ fn main() {
             conversion::probe_image,
             conversion::probe_pdf,
             media::select_images,
+            media::select_pdfs,
+            conversion::start_merge_pdf,
             media::claim_drop,
             conversion::start_images_pdf,
             conversion::start_conversion,

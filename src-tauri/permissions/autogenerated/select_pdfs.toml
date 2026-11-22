@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-select-pdfs"
+description = "Enables the select_pdfs command without any pre-configured scope."
+commands.allow = ["select_pdfs"]
+
+[[permission]]
+identifier = "deny-select-pdfs"
+description = "Denies the select_pdfs command without any pre-configured scope."
+commands.deny = ["select_pdfs"]

@@ -325,32 +325,48 @@ pub fn build(media: &Media, s: &Settings, engines: &Engines) -> Result<Plan> {
         .into_iter()
         .flatten()
         .any(|f| f.uncertain || f.video && f.vcodec.is_none() || f.audio && f.acodec.is_none());
-    let summary = format!(
-        "{} · {} · {} · {}",
-        s.format.to_uppercase(),
-        if s.mode == "video" {
-            s.resolution
-                .map(|h| format!("{h}p"))
-                .unwrap_or("source resolution".into())
-        } else {
-            "audio only".into()
-        },
-        s.fps.map(|f| format!("{f} fps")).unwrap_or(
-            if s.mode == "video" {
-                "source frame rate"
-            } else {
-                "selected audio settings"
-            }
-            .into()
-        ),
-        if uncertain {
-            "conversion may be required (incomplete source details)"
-        } else if conversion {
-            "conversion required"
-        } else {
-            "stream copy / remux"
+    // Presentation evidence is distinct from conservative pre-download encoder decisions.
+    // Missing properties must not by themselves be described as required conversion.
+    let codec_change = |source: Option<&str>, copies: &[String], requested: &str| {
+        source.is_some_and(|codec| {
+            !copies.iter().any(|c| c == codec)
+                || requested != "auto" && encoder_codec(requested) != codec
+        })
+    };
+    let confirmed = video.is_some_and(|v| {
+        !copy_video
+            && (s.quality != "preserve"
+                || s.resolution.zip(v.height).is_some_and(|(a, b)| a != b)
+                || s.fps
+                    .zip(v.fps)
+                    .is_some_and(|(a, b)| (a as f64 - b).abs() > 0.001)
+                || codec_change(v.vcodec.as_deref(), &c.copy_video, &s.video_encoder))
+    }) || audio.is_some_and(|a| {
+        !copy_audio
+            && (s.audio_kbps.is_some()
+                || s.sample_rate
+                    .zip(a.sample_rate)
+                    .is_some_and(|(a, b)| a != b)
+                || s.channels.zip(a.channels).is_some_and(|(a, b)| a != b)
+                || codec_change(a.acodec.as_deref(), &c.copy_audio, &s.audio_encoder))
+    });
+    let mut parts = vec![format!("Output: {}", s.format.to_uppercase())];
+    if s.mode == "video" {
+        if let Some(h) = s.resolution.or_else(|| video.and_then(|v| v.height)) {
+            parts.push(format!("{h}p"));
         }
-    );
+        if let Some(fps) = s.fps.map(f64::from).or_else(|| video.and_then(|v| v.fps)) {
+            parts.push(format!("{fps} fps"));
+        }
+    } else {
+        parts.push("audio only".into());
+    }
+    if confirmed {
+        parts.push("conversion required".into());
+    } else if !conversion && !uncertain {
+        parts.push("stream copy / remux".into());
+    }
+    let summary = parts.join(" · ");
     Ok(Plan {
         sources: ids.clone(),
         video_source: video.map(|f| f.id.clone()),
