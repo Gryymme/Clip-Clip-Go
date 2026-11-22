@@ -7,6 +7,7 @@ mod errors;
 mod metadata;
 mod plan;
 mod protocol;
+mod relay;
 #[cfg(test)]
 mod tests;
 use crate::{
@@ -49,6 +50,7 @@ pub struct Job {
     diagnostics: Vec<Diagnostic>,
     media: Option<Media>,
     destination: Option<String>,
+    browser_source: Option<crate::companion::shared::Candidate>,
 }
 impl Job {
     fn new(id: u64, stage: &str, message: &str) -> Self {
@@ -68,14 +70,38 @@ impl Job {
             diagnostics: Vec::new(),
             media: None,
             destination: None,
+            browser_source: None,
         }
     }
 }
 #[derive(Clone)]
 struct Inspected {
     id: u64,
-    url: String,
+    input: MediaInput,
     media: Media,
+}
+#[derive(Clone)]
+enum MediaInput {
+    Page(String),
+    Browser(crate::companion::shared::Candidate),
+}
+impl MediaInput {
+    fn url(&self) -> &str {
+        match self {
+            Self::Page(url) => url,
+            Self::Browser(c) => &c.media_url,
+        }
+    }
+    fn transport(&self) -> Result<(String, Option<relay::Relay>)> {
+        if let Self::Browser(c) = self {
+            c.validate(crate::companion::shared::now())?;
+            if c.context.referer.is_some() {
+                let relay = relay::Relay::start(c)?;
+                return Ok((relay.url.clone(), Some(relay)));
+            }
+        }
+        Ok((self.url().to_owned(), None))
+    }
 }
 #[derive(Default)]
 struct Inner {
@@ -287,12 +313,34 @@ pub fn inspect_download(
     url: String,
 ) -> Result<Job> {
     let url = metadata::url(&url)?;
+    inspect_input(state.inner(), shared.inner(), MediaInput::Page(url))
+}
+#[tauri::command]
+pub fn inspect_browser_download(
+    state: tauri::State<'_, Runtime>,
+    shared: tauri::State<'_, conversion::Runtime>,
+    companion: tauri::State<'_, crate::companion::Runtime>,
+    id: String,
+) -> Result<Job> {
+    let candidate = companion.pending(&id)?;
+    let job = inspect_input(
+        state.inner(),
+        shared.inner(),
+        MediaInput::Browser(candidate),
+    )?;
+    let _ = companion.take(&id);
+    Ok(job)
+}
+fn inspect_input(state: &Runtime, shared: &conversion::Runtime, input: MediaInput) -> Result<Job> {
     let operation = shared.core.reserve()?;
     shared.previews.cancel_all();
     let engines = shared.core.engines()?;
-    let runtime = state.inner().clone();
+    let runtime = state.clone();
     let id = runtime.sequence.fetch_add(1, Ordering::SeqCst) + 1;
-    let job = Job::new(id, "inspecting", "Inspecting the link…");
+    let mut job = Job::new(id, "inspecting", "Inspecting the link…");
+    if let MediaInput::Browser(c) = &input {
+        job.browser_source = Some(c.clone());
+    }
     {
         let mut i = runtime.inner.lock().unwrap();
         i.job = Some(job.clone());
@@ -306,6 +354,7 @@ pub fn inspect_download(
             // System temp is allowed at runtime; development tests explicitly use project scratch.
             let temp = std::env::temp_dir();
             let stage = workspace(&temp, &operation.control)?;
+            let (url, relay) = input.transport()?;
             let args = inspection_args(&t, &engines, stage.path(), &url);
             let report_runtime = runtime.clone();
             let notify: Notify = Arc::new(move |stage, _, point| {
@@ -327,15 +376,18 @@ pub fn inspect_download(
                 None,
             )?;
             if !output.success {
-                return Err(metadata::site_error(&output.stderr));
+                return Err(relay
+                    .as_ref()
+                    .and_then(|r| r.failure())
+                    .unwrap_or_else(|| metadata::site_error(&output.stderr)));
             }
-            let media = metadata::parse(&output.stdout, &url)?;
+            let media = metadata::parse(&output.stdout, input.url())?;
             operation.control.check()?;
             {
                 let mut i = runtime.inner.lock().unwrap();
                 i.inspected = Some(Inspected {
                     id,
-                    url,
+                    input,
                     media: media.clone(),
                 });
             }
@@ -350,7 +402,21 @@ pub fn inspect_download(
 }
 #[tauri::command]
 pub fn download_status(state: tauri::State<'_, Runtime>) -> Option<Job> {
-    state.inner.lock().unwrap().job.clone()
+    let mut inner = state.inner.lock().unwrap();
+    if inner.control.is_none() {
+        if inner.inspected.as_ref().is_some_and(|s|matches!(&s.input,MediaInput::Browser(c) if c.expires_at<=crate::companion::shared::now())){inner.inspected=None;}
+        if let Some(job) = inner.job.as_mut() {
+            if job
+                .browser_source
+                .as_ref()
+                .is_some_and(|c| c.expires_at <= crate::companion::shared::now())
+            {
+                job.browser_source = None;
+                job.revision += 1;
+            }
+        }
+    }
+    inner.job.clone()
 }
 #[tauri::command]
 pub fn cancel_download(state: tauri::State<'_, Runtime>, id: u64) -> Result<()> {
@@ -658,6 +724,7 @@ fn execute(
         return Err("That filename already exists. Choose another name; existing files are never overwritten.".into());
     }
     let stage = workspace(folder, control)?;
+    let (input_url, relay) = inspected.input.transport()?;
     let mut paths = Vec::new();
     let mut actual = inspected.media.clone();
     actual.duration = None;
@@ -697,7 +764,7 @@ fn execute(
                 .to_string_lossy()
                 .into_owned(),
             "--".into(),
-            inspected.url.clone(),
+            input_url.clone(),
         ]);
         let mut completed = None;
         let download_runner = ReportRunner {
@@ -752,7 +819,10 @@ fn execute(
             return Err(format!(
                 "Download failed for source {}. {}",
                 index + 1,
-                metadata::site_error(&result.stderr)
+                relay
+                    .as_ref()
+                    .and_then(|r| r.failure())
+                    .unwrap_or_else(|| metadata::site_error(&result.stderr))
             ));
         }
         let path = completed.ok_or("Download completion could not be confirmed.")?;
@@ -913,7 +983,10 @@ pub fn start_download(
         .clone()
         .ok_or("Choose a destination folder first.")?;
     let id = runtime.sequence.fetch_add(1, Ordering::SeqCst) + 1;
-    let job = Job::new(id, "downloading", "Preparing the selected source streams…");
+    let mut job = Job::new(id, "downloading", "Preparing the selected source streams…");
+    if let MediaInput::Browser(c) = &inspected.input {
+        job.browser_source = Some(c.clone());
+    }
     {
         let mut i = runtime.inner.lock().unwrap();
         i.job = Some(job.clone());

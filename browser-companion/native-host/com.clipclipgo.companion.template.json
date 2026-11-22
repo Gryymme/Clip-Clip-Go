@@ -1,0 +1,7 @@
+{
+  "name": "com.clipclipgo.companion",
+  "description": "ClipClipGO browser companion (template, not registered)",
+  "path": "REPLACE_WITH_ABSOLUTE_APP_OWNED_HOST_EXE",
+  "type": "stdio",
+  "allowed_origins": ["chrome-extension://REPLACE_WITH_ACTUAL_EXTENSION_ID/"]
+}

@@ -1,3 +1,4 @@
+import type {BrowserCandidate} from '../companion/types';
 import compatibility from '../../src-tauri/src/downloader/compatibility.json' with {type:'json'};
 export const contract = compatibility;
 export interface SourceFormat { id:string; ext:string; video:boolean; audio:boolean; uncertain:boolean; vcodec:string|null; acodec:string|null; width:number|null; height:number|null; fps:number|null; bitrate:number|null; size:number|null; approximateSize:boolean; sampleRate:number|null; channels:number|null }
@@ -5,7 +6,7 @@ export interface DownloadMedia {title:string; source:string; thumbnail:string|nu
 export interface DownloadSettings {mode:'video'|'audio'; format:string; videoSource:string; audioSource:string; resolution:number|null; fps:number|null; videoEncoder:string; quality:string; videoKbps:number|null; keepAudio:boolean; audioEncoder:string; audioKbps:number|null; sampleRate:number|null; channels:number|null}
 export interface DownloadPlan {sources:string[]; videoSource:string|null; audioSource:string|null; videoEncoder:string|null; audioEncoder:string|null; copyVideo:boolean; copyAudio:boolean; conversion:boolean; merge:boolean; uncertain:boolean; summary:string}
 export interface DownloadDiagnostic {stage:string; engine:string; exitCode:number|null; selectedIds:string[]; detail:string}
-export interface DownloadJob {id:number; revision:number; stage:string; message:string; percent:number|null; bytes:number|null; total:number|null; speed:number|null; eta:number|null; stream:number|null; streams:number|null; progressKind?:string|null; diagnostics?:DownloadDiagnostic[]; media:DownloadMedia|null; destination:string|null}
+export interface DownloadJob {id:number; revision:number; stage:string; message:string; percent:number|null; bytes:number|null; total:number|null; speed:number|null; eta:number|null; stream:number|null; streams:number|null; progressKind?:string|null; diagnostics?:DownloadDiagnostic[]; browserSource?:BrowserCandidate|null; media:DownloadMedia|null; destination:string|null}
 export interface Capabilities {encoders:string[]; ytDlp:string; deno:string; contract:typeof contract}
 export const initialSettings:DownloadSettings={mode:'video',format:'mp4',videoSource:'best',audioSource:'auto',resolution:null,fps:null,videoEncoder:'auto',quality:'preserve',videoKbps:null,keepAudio:true,audioEncoder:'auto',audioKbps:null,sampleRate:null,channels:null};
 export function defaultName(title:string){let value='';for(const char of title){if(value.length+char.length>100)break;value+=char;}return value;}

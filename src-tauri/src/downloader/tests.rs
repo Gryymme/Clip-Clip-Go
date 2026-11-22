@@ -1,4 +1,5 @@
 use super::*;
+mod browser;
 mod pipeline;
 use std::{
     fs,
@@ -398,12 +399,14 @@ fn generate(e: &Engines, path: &Path, args: &[&str]) {
         .chain(args.iter().copied())
         .map(String::from)
         .collect::<Vec<_>>();
-    all.push(path.to_string_lossy().into_owned());
+    all.push(path.to_string_lossy().replace('\\', "/"));
+    let control = Control::default();
+    *control.working_directory.lock().unwrap() = path.parent().map(Path::to_owned);
     let r = NativeRunner
         .run(
             &e.ffmpeg,
             &all,
-            &Control::default(),
+            &control,
             Some(Duration::from_secs(40)),
             None,
         )
@@ -533,7 +536,11 @@ fn local_http_real_download_convert_merge_and_ffprobe() {
         "Inspection fetched media payload: {:?}",
         server.requests.lock().unwrap()
     );
-    let inspected = Inspected { id: 1, url, media };
+    let inspected = Inspected {
+        id: 1,
+        input: MediaInput::Page(url),
+        media,
+    };
     let mut s = settings();
     s.resolution = None;
     let events = Arc::new(Mutex::new(Vec::new()));
@@ -597,7 +604,7 @@ fn local_http_real_download_convert_merge_and_ffprobe() {
     actual_format(&mut media.formats[0], &source_doc);
     let inspected = Inspected {
         id: 2,
-        url: direct,
+        input: MediaInput::Page(direct),
         media,
     };
     s.resolution = Some(360);
@@ -672,7 +679,7 @@ fn local_http_real_download_convert_merge_and_ffprobe() {
     let media = inspect_local(&t, &e, &separate, d.path());
     let inspected = Inspected {
         id: 3,
-        url: separate,
+        input: MediaInput::Page(separate),
         media,
     };
     let mut s = settings();
@@ -697,7 +704,11 @@ fn local_http_real_download_convert_merge_and_ffprobe() {
     for (name, mode) in [("video.mp4", "video"), ("audio.m4a", "audio")] {
         let url = format!("{}/{name}", server.url);
         let media = inspect_local(&t, &e, &url, d.path());
-        let inspected = Inspected { id: 4, url, media };
+        let inspected = Inspected {
+            id: 4,
+            input: MediaInput::Page(url),
+            media,
+        };
         let mut s = settings();
         s.mode = mode.into();
         s.keep_audio = false;
@@ -1070,7 +1081,11 @@ fn throttled_two_sources_keep_selected_ids_and_emit_live_progress_before_merge()
     assert!(media.formats.iter().filter(|f| f.video).count() >= 2);
     // Treat a deliberately inaccurate site duration as metadata, not a final-file requirement.
     media.duration = Some(900.0);
-    let inspected = Inspected { id: 1, url, media };
+    let inspected = Inspected {
+        id: 1,
+        input: MediaInput::Page(url),
+        media,
+    };
     let mut s = settings();
     s.format = "webm".into();
     s.resolution = Some(360);

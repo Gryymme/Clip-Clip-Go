@@ -4,6 +4,9 @@ import Icon from '../components/Icon';
 import {EmptySelectionCard} from '../converter/SelectionCard';
 import {active,bestVideo,sourceChoices,sourceLabel,bytes,contract,effectiveAudio,lossy,formatRule,type DownloadSettings} from './model';
 import type {DownloaderController} from './useDownloader';
+import type {CompanionController} from '../companion/useCompanion';
+import {sourceHost} from '../companion/types';
+import BrowserSource from '../companion/BrowserSource';
 
 function Select({id,label,value,onChange,children,disabled=false,help}:{id:string;label:string;value:string|number;onChange:(v:string)=>void;children:ReactNode;disabled?:boolean;help?:string}){
  return <div className="download-field"><label className="field-label" htmlFor={id}>{label}</label><select id={id} value={value} onChange={e=>onChange(e.target.value)} disabled={disabled} aria-describedby={help?`${id}-help`:undefined}>{children}</select>{help&&<p className="field-help" id={`${id}-help`}>{help}</p>}</div>;
@@ -25,14 +28,17 @@ export function DownloadStatus({controller:c}:{controller:DownloaderController})
   {Boolean(j.diagnostics?.length)&&<details className="download-diagnostics field-help"><summary>Technical diagnostics</summary><ol>{j.diagnostics!.map((d,i)=><li key={i}><p>{d.stage} · {d.engine} · {d.exitCode===null?'no exit status':'exit '+d.exitCode}{d.selectedIds.length?' · formats '+d.selectedIds.join(', '):''}</p>{d.detail&&<pre>{d.detail}</pre>}</li>)}</ol></details>}
  </section>;
 }
-export default function Downloader({controller:c}:{controller:DownloaderController}){
+export default function Downloader({controller:c,companion,onBrowserSetup}:{controller:DownloaderController;companion?:CompanionController;onBrowserSetup?:()=>void}){
  const m=c.inspection?.media,s=c.settings,disabled=c.busy||c.otherBusy;
  const v=m?bestVideo(m,s):undefined,rule=formatRule(s.format),audio=effectiveAudio(s,c.capabilities?.encoders??[]),hasAudio=s.mode==='audio'||s.keepAudio;
  const patch=(p:Partial<DownloadSettings>)=>c.change(p);
  const encoderLabel=(id:string)=>contract.encoders.find(e=>e.id===id)?.label??id;
  const encoders=(ids:string[])=>ids.map(id=><option key={id} value={id} disabled={!c.capabilities?.encoders.includes(id)}>{encoderLabel(id)}{!c.capabilities?.encoders.includes(id)?' · unavailable in bundled FFmpeg':''}</option>);
  return <div className="downloader">
+ {companion?.status.candidate&&<BrowserSource candidate={companion.status.candidate} disabled={disabled||!c.capabilities} onInspect={()=>void c.inspectBrowser(companion.status.candidate!.id)} onDismiss={()=>void companion.dismiss(companion.status.candidate!.id)}/>}
+ {c.job?.browserSource&&<p className="field-help browser-source-note" dir="auto">From browser · {sourceHost(c.job.browserSource.pageUrl)} → {sourceHost(c.job.browserSource.mediaUrl)}</p>}
  <section className="workflow-section download-link-card" aria-label="Media link"><EmptySelectionCard title="Media link" description="Paste a media-page or direct-media URL." icon="download" actions={<button form="download-link-form" className="button button-primary" disabled={disabled||!c.url.trim()||!c.capabilities} type="submit">{c.job?.stage==='inspecting'?'Inspecting…':'Inspect link'}</button>}><form id="download-link-form" onSubmit={e=>{e.preventDefault();void c.inspect();}}><label className="sr-only" htmlFor="media-url">HTTP or HTTPS media URL</label><input id="media-url" type="url" className="text-input" value={c.url} maxLength={8192} placeholder="https://…" disabled={disabled} onChange={e=>c.setUrl(e.target.value)} required autoComplete="off" spellCheck={false}/></form></EmptySelectionCard>{!c.capabilities&&!c.error&&<p role="status" className="field-help">Checking bundled engines…</p>}</section>
+ {onBrowserSetup&&<div className="browser-entry"><p className="field-help">Media found while playing in Chrome can be sent here.</p><button className="button button-secondary" onClick={onBrowserSetup}>Browser companion setup</button></div>}
  {c.error&&<p className="selection-error" role="alert">{c.error}</p>}
  {m&&<>
  <section className="workflow-section" aria-labelledby="media-heading"><h2 id="media-heading">Source</h2><div className="file-summary download-summary"><Thumbnail key={m.thumbnail} url={m.thumbnail}/><div className="file-summary-content"><h3 className="selected-file-name" dir="auto">{m.title}</h3><p className="file-facts"><span>{m.source}</span><span>{displayDuration(m.duration)}</span></p></div></div>

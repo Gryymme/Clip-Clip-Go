@@ -90,6 +90,13 @@ fn main() {
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
             "inspect_download",
+            "inspect_browser_download",
+            "companion_status",
+            "dismiss_browser_source",
+            "setup_browser_companion",
+            "connect_browser_companion",
+            "browser_companion_action",
+            "remove_browser_bridge",
             "download_status",
             "cancel_download",
             "download_capabilities",

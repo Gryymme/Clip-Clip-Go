@@ -8,6 +8,13 @@
   ],
   "permissions": [
     "allow-inspect-download",
+    "allow-inspect-browser-download",
+    "allow-companion-status",
+    "allow-dismiss-browser-source",
+    "allow-setup-browser-companion",
+    "allow-connect-browser-companion",
+    "allow-browser-companion-action",
+    "allow-remove-browser-bridge",
     "allow-download-status",
     "allow-cancel-download",
     "allow-download-capabilities",

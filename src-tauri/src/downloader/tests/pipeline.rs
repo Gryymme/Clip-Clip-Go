@@ -96,7 +96,7 @@ fn cancellation_at_each_stage_and_expiry_retry_preserve_plan_and_publication() {
     s.quality = "high".into();
     let inspected = Inspected {
         id: 1,
-        url: "https://media.example.test/item?t=1".into(),
+        input: MediaInput::Page("https://media.example.test/item?t=1".into()),
         media: metadata(),
     };
     let p = plan::build(&inspected.media, &s, &e).unwrap();

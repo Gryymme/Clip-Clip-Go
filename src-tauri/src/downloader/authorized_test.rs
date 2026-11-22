@@ -102,7 +102,11 @@ fn authorized_youtube_fixture() {
     let mut s:Settings=serde_json::from_value(json!({"mode":"video","format":"mp4","videoSource":"best","audioSource":"auto","resolution":null,"fps":null,"videoEncoder":"auto","quality":"preserve","videoKbps":null,"keepAudio":true,"audioEncoder":"auto","audioKbps":null,"sampleRate":null,"channels":null})).unwrap();
     s.video_source = source.id.clone();
     let p = plan::build(&media, &s, &e).unwrap();
-    let inspected = Inspected { id: 1, url, media };
+    let inspected = Inspected {
+        id: 1,
+        input: MediaInput::Page(url),
+        media,
+    };
     let notify: Notify = Arc::new(|stage, message, point| {
         if let Some(diag) = point.and_then(|p| p.diagnostic) {
             println!(

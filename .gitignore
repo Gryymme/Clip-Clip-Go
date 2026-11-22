@@ -5,6 +5,7 @@ src-tauri/gen/schemas/
 .npm-cache/
 .cargo-cache/
 .engine-cache/
+.browser-companion/
 src-tauri/resources/pdf/
 src-tauri/binaries/*.exe
 src-tauri/binaries/*.preparing-*

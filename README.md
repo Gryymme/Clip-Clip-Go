@@ -4,6 +4,12 @@ Clip-Clip-Go is a Windows desktop application combining single-link media downlo
 
 ## Downloader
 
+The optional **ClipClipGO browser companion** adds user-activated Chrome media discovery and Native Messaging handoff. Select a detected HTTP file/HLS/DASH source; the app inspects that media URL directly and reuses the source/output workflow. Download still requires confirmation in ClipClipGO. Website access is optional and origin-scoped; some frames/CDNs need separate grants. No cookies, Authorization headers, browser cache or credentials are imported. Detection does not guarantee download or universal site support.
+
+Settings and Downloader offer **Install browser extension** with a supported **Load unpacked** path: open/copy `chrome://extensions/`, enable Developer mode, select the app’s `extension` folder, paste Chrome’s actual extension ID into ClipClipGO, and choose **Connect / Finish setup**. Then open the extension popup and click **Connect**. No PowerShell registration is required. The app resolves its actual install folder (including custom/per-user installs); debug builds identify their project fallback when needed. Setup writes only the owned per-user bridge; **Connected** requires a real handshake. No store listing is currently configured. See [Browser companion setup](docs/browser-companion.md) for removal, permissions and verification limits.
+
+Choose **Activate this tab** before playback in each additional tab. Same-origin navigation clears old sources while retaining that tab’s activation for its original 10-minute timeout; changing origin requires activation again. The popup provides missing-frame permission actions and a CDN-origin grant/rescan. Sending a source or losing the desktop connection does not stop discovery.
+
 Paste one HTTP/HTTPS media-page or direct-media URL, choose **Inspect link**, select a source and final output, review the native execution summary, choose a destination folder and filename, then download. Inspection is cancellable and limited to 60 seconds; missing metadata stays unknown. Source quality defaults to Best available, with distinct reported resolutions/frame rates and advanced exact video/audio stream selection. Separate video/audio streams are merged; video-only and audio-only sources are identified without claiming nonexistent audio.
 
 | Settings | Implemented choices |

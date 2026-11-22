@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-inspect-browser-download"
+description = "Enables the inspect_browser_download command without any pre-configured scope."
+commands.allow = ["inspect_browser_download"]
+
+[[permission]]
+identifier = "deny-inspect-browser-download"
+description = "Denies the inspect_browser_download command without any pre-configured scope."
+commands.deny = ["inspect_browser_download"]

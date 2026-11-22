@@ -1,0 +1,5 @@
+import type {BrowserCandidate} from './types';
+import {sourceHost} from './types';
+export default function BrowserSource({candidate:c,disabled,onInspect,onDismiss}:{candidate:BrowserCandidate;disabled:boolean;onInspect:()=>void;onDismiss:()=>void}){
+ return <section className="workflow-section browser-source" aria-labelledby="browser-source-heading"><h2 id="browser-source-heading">Browser source</h2><p className="selected-file-name" dir="auto">{c.title||'Detected media'}</p><p className="field-help" dir="auto">{sourceHost(c.mediaUrl)} · {c.mediaType==='hls'?'HLS playlist':c.mediaType==='dash'?'DASH manifest':'Direct media'}</p><p className="field-help">Review the available source and output settings before downloading. Expiring or session-protected sources may fail.</p><div className="companion-actions"><button className="button button-primary" disabled={disabled} onClick={onInspect}>Inspect browser source</button><button className="button button-secondary" onClick={onDismiss}>Dismiss</button></div></section>;
+}

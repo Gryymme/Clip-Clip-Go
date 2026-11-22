@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod bundled;
+mod companion;
 mod conversion;
 mod downloader;
 mod engine;
@@ -18,6 +19,15 @@ fn main() {
     tauri::Builder::default()
         .manage(conversion::Runtime::default())
         .manage(downloader::Runtime::default())
+        .manage(companion::Runtime::default())
+        .setup(|app| {
+            use tauri::Manager;
+            let runtime = app.state::<companion::Runtime>();
+            if let Err(e) = runtime.start(app.handle().clone()) {
+                runtime.record_start_error(e);
+            }
+            Ok(())
+        })
         .plugin(tauri_plugin_dialog::init())
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event {
@@ -32,6 +42,13 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             downloader::inspect_download,
+            downloader::inspect_browser_download,
+            companion::companion_status,
+            companion::dismiss_browser_source,
+            companion::setup_browser_companion,
+            companion::connect_browser_companion,
+            companion::browser_companion_action,
+            companion::remove_browser_bridge,
             downloader::download_status,
             downloader::cancel_download,
             downloader::download_capabilities,
@@ -63,6 +80,7 @@ fn main() {
                 app.state::<conversion::Runtime>().core.shutdown();
                 app.state::<conversion::Runtime>().previews.cancel_all();
                 app.state::<downloader::Runtime>().shutdown();
+                app.state::<companion::Runtime>().stop();
             }
         });
 }

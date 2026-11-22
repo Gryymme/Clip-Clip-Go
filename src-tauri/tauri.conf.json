@@ -30,8 +30,8 @@
     "active": true,
     "targets": ["msi"],
     "useLocalToolsDir": true,
-    "externalBin": ["binaries/ffmpeg", "binaries/ffprobe", "binaries/yt-dlp", "binaries/deno"],
-    "resources": { "../third-party/downloader/": "notices/downloader/", "../third-party/ffmpeg/": "notices/ffmpeg/", "../third-party/text/": "notices/text/", "resources/pdf/": "pdf/", "../third-party/pdf/": "notices/pdf/" },
+    "externalBin": ["binaries/ffmpeg", "binaries/ffprobe", "binaries/yt-dlp", "binaries/deno", "binaries/clipclipgo-native-host"],
+    "resources": { "../browser-companion/extension/": "extension/", "../third-party/downloader/": "notices/downloader/", "../third-party/ffmpeg/": "notices/ffmpeg/", "../third-party/text/": "notices/text/", "resources/pdf/": "pdf/", "../third-party/pdf/": "notices/pdf/" },
     "icon": ["icons/icon.png", "icons/icon.ico"]
   }
 }
