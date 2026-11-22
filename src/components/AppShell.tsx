@@ -7,7 +7,7 @@ export default function AppShell({ activePage, onNavigate, children }: { activeP
     <aside className="sidebar" aria-label="Application sidebar">
       <header className="sidebar-header"><h2 className="brand-name" aria-label="ClipClipGO"><span>ClipClip</span><span className="brand-accent">GO</span></h2></header>
       <nav className="sidebar-navigation" aria-label="Main navigation">
-        <ul className="navigation-list">{pages.map(page => <li key={page.name}>
+        <ul className="navigation-list">{pages.map(page => <li key={page.name} className={'groupStart' in page ? 'navigation-group-start' : undefined}>
           <button className="navigation-button" type="button" aria-current={activePage === page.name ? 'page' : undefined} onClick={() => onNavigate(page.name)}><Icon name={page.icon} /><span>{page.name}</span></button>
         </li>)}</ul>
       </nav>

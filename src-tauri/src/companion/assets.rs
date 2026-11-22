@@ -4,6 +4,12 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 pub const FILES: &[&str] = &[
     "manifest.json",
+    "icons/icon-16.png",
+    "icons/icon-24.png",
+    "icons/icon-32.png",
+    "icons/icon-48.png",
+    "icons/icon-64.png",
+    "icons/icon-128.png",
     "worker.js",
     "model.js",
     "detect.js",
@@ -103,6 +109,7 @@ mod tests {
         std::fs::create_dir_all(extension.join("fonts")).unwrap();
         let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../browser-companion/extension");
         for name in FILES {
+            std::fs::create_dir_all(extension.join(name).parent().unwrap()).unwrap();
             std::fs::copy(source.join(name), extension.join(name)).unwrap();
         }
         let app = install.join("clip-clip-go.exe");

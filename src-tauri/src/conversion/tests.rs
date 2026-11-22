@@ -11,6 +11,7 @@ fn test_dir() -> tempfile::TempDir {
 fn info(video: bool, audio: bool) -> MediaInfo {
     MediaInfo {
         duration: Some(2.0),
+        video_geometry: video.then_some(engine::VideoGeometry{width:160.0,height:96.0}),
         video: video.then(|| engine::StreamInfo {
             index: 2,
             codec: "h264".into(),
@@ -142,7 +143,7 @@ fn run_mock(mode: &'static str) -> (tempfile::TempDir, PathBuf, Result<PathBuf>,
 
 #[test]
 fn explicit_presets_and_stream_maps() {
-    for format in FORMATS {
+    for format in FORMATS.into_iter().filter(|f| *f != OutputFormat::Gif) {
         let args = command_args(
             Path::new("C:/input with spaces & quotes.mp4"),
             Path::new("C:/owned.tmp"),
@@ -449,7 +450,7 @@ fn bundled_real_engine_smoke_all_presets() {
     let original = fs::read(&input).unwrap();
     let media = engine::probe(&engines, &input, &NativeRunner, &Control::default()).unwrap();
     assert!(media.video.is_some() && media.audio.is_some());
-    for format in FORMATS {
+    for format in FORMATS.into_iter().filter(|f| *f != OutputFormat::Gif) {
         let destination = dir.path().join(format!("converted.{}", format.extension()));
         let result = convert_to(
             &engines,

@@ -40,7 +40,7 @@ See [Downloader implementation, correction evidence and manual checklist](docs/d
 
 | Input | Outputs |
 | --- | --- |
-| MP4, MKV, WebM, MOV | MP4, MKV, WebM; audio extraction to MP3, WAV, FLAC, M4A |
+| MP4, MKV, WebM, MOV | MP4, MKV, WebM, animated GIF; audio extraction to MP3, WAV, FLAC, M4A |
 | MP3, WAV, FLAC, M4A, OGG | MP3, WAV, FLAC, M4A |
 | JPEG/JPG, PNG, WebP, BMP, TIFF/TIF (one still image) | JPG, PNG, WebP, BMP, TIFF |
 | TXT | Markdown, HTML, PDF |
@@ -49,6 +49,10 @@ See [Downloader implementation, correction evidence and manual checklist](docs/d
 | PDF | TXT, Markdown, HTML, PNG page images, JPEG page images |
 | Multiple supported still images, on Images to PDF | One PDF in the visible list order |
 | Multiple PDFs, on Merge PDF | One PDF containing all pages in the visible file order |
+
+For an inspected video stream, **GIF** offers a maximum edge of 320, 480 (default), 640 or 960 px and 10 (default), 15 or 20 fps. The UI shows the resulting dimensions and selected frame rate. Display aspect ratio (including non-square pixels) and right-angle rotation are applied; smaller sources are not enlarged. GIF settings survive navigation in the session. Audio, subtitles, metadata and chapters are excluded, and GIFs loop continuously. There is no trimming: the whole video stream is converted. Long/high-resolution clips can produce large files and take time to process. GIF uses a limited color palette and dithering; color banding/detail loss is possible. Frame delays have hundredth-second precision, so 15 fps uses rounded delays; extremely short clips producing fewer than two frames fail explicitly. Inputs without usable dimensions or with unsupported non-right-angle display rotation cannot use GIF.
+
+GIF uses the bundled FFmpeg in two passes: palette analysis is indeterminate, then palette-based encoding reports measured output time. A unique temporary workspace holds the palette and encoded GIF; cancellation terminates the engine and removes owned intermediates. Before protected publication, the app checks GIF structure, dimensions, multiple frames, frame timing and the continuous-loop extension, and fully decodes all frames with bundled FFmpeg. No external runtime or dependency was added.
 
 Extension matching is case-insensitive. Markdown output uses `.md`, HTML uses `.html`, and JPEG uses `.jpg`. Identical-format document conversions are not offered. Microsoft Office and OpenDocument formats, including DOC/DOCX, RTF, XLS/XLSX, PPT/PPTX, ODT, ODS and ODP, are unsupported. **LibreOffice and optional Office installation are permanently cancelled.** The short historical decision is in [docs/office-runtime.md](docs/office-runtime.md).
 

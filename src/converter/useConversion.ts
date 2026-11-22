@@ -1,3 +1,4 @@
+import {gifDimensions,defaultGifOptions,type GifOptions} from './gif';
 import {selectPdfs,startMergePdf,claimPdfDrop} from './native';
 import {initialSize,sizeError,sizePayload,type PageSize} from './pageSize';
 import { isDocumentRoute } from './formats';
@@ -16,6 +17,7 @@ export function useConversion(selection: SelectionState, dispatch: Dispatch<Sele
   const [engineLoading, setEngineLoading] = useState(true);
   const [probe, setProbe] = useState<{ path: string; media: MediaInfo } | null>(null);
   const [pdfProbe, setPdfProbe] = useState<{path: string; info: PdfInfo} | null>(null);
+  const [gifOptions,setGifOptions] = useState<GifOptions>(defaultGifOptions);
   const [pdfPages, setPdfPages] = useState('');
   const [mergeFiles, setMergeFiles] = useState<(NativeFile & {pages?:number; issue?:string})[]>([]);
   const [images, setImages] = useState<NativeFile[]>([]);
@@ -93,15 +95,16 @@ export function useConversion(selection: SelectionState, dispatch: Dispatch<Sele
   const preview = useFilePreview(selection.file, Boolean(imageInput ? image : mediaInput ? media : false), busy || imagesPage, Boolean(probeError) || Boolean(selection.file?.category === 'video' && !engineLoading && !engine?.ready));
   const imagePreviews = useImagePreviews(images, busy || !imagesPage || engineLoading || probing);
   const rangeError = pdf && (selection.output === 'png' || selection.output === 'jpg') ? pageRangeError(pdfPages, pdf.pages) : null;
+  const gifSize = gifDimensions(media?.videoGeometry,gifOptions);
   const formats = media?.formats ?? engine?.formats ?? [];
   const availability = formats.find(item => item.format === selection.output);
   const textReady = selection.file && isDocumentRoute(selection.file.format,selection.output) && (!pdfInput || (pdf && !rangeError && (pdf.hasText || isImageFormat(selection.output))));
-  const canConvert = Boolean(((textReady) || (mediaInput && engine?.ready && media && availability?.available && isEngineFormat(selection.output)) || (imageInput && image && isImageFormat(selection.output))) && !busy && !adding && !engineLoading && !probing && !selection.selecting);
+  const canConvert = Boolean(((textReady) || (mediaInput && engine?.ready && media && availability?.available && isEngineFormat(selection.output) && (selection.output !== 'gif' || gifSize)) || (imageInput && image && isImageFormat(selection.output))) && !busy && !adding && !engineLoading && !probing && !selection.selecting);
 
   async function start() {
     if (operation.current || !canConvert || !selection.file || (!isEngineFormat(selection.output) && !isImageFormat(selection.output) && !isTextFormat(selection.output) && selection.output !== 'pdf')) return;
     operation.current = true; setStarting(true); setError(null); dispatch({ type: 'lock', locked: true });
-    try { const next = await startConversion(selection.file.path, selection.output, pdfPages); setJob(previous => mergeJob(previous, next)); }
+    try { const next = await startConversion(selection.file.path, selection.output, pdfPages, gifOptions); setJob(previous => mergeJob(previous, next)); }
     catch (cause) { setError(nativeError(cause)); }
     finally { operation.current = false; setStarting(false); }
   }
@@ -158,7 +161,7 @@ export function useConversion(selection: SelectionState, dispatch: Dispatch<Sele
     catch (cause) { setError(nativeError(cause)); }
     finally { setCancelling(false); }
   }
-  return { mergeFiles, mergePages, mergeLimitError, canMerge, chooseMergeFiles, startMerge,
+  return { gifOptions,setGifOptions,gifSize, mergeFiles, mergePages, mergeLimitError, canMerge, chooseMergeFiles, startMerge,
     removeMergeFile:(index:number)=>{if(!busy && !adding) setMergeFiles(previous=>previous.filter((_,i)=>i!==index));},
     moveMergeFile:(index:number,direction:-1|1)=>{if(!busy && !adding) setMergeFiles(previous=>moveImage(previous,index,direction));},
     customSize,setCustomSize,pageSizeError,selectionError:setError, imagePreviews: imagePreviews.states, failImagePreview: imagePreviews.fail, engine, engineLoading, media, image, pdf, preview, pdfPages, setPdfPages, rangeError, outputIsFolder: pdfInput && (selection.output === 'png' || selection.output === 'jpg'), images, pageSize, setPageSize, adding, chooseImages, startImagePdf,

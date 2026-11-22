@@ -4,7 +4,7 @@ export const categoryLabels: Record<FileCategory, string> = {
 };
 
 const audioOutputs = ['mp3', 'wav', 'flac', 'm4a'] as const;
-const videoOutputs = ['mp4', 'mkv', 'webm'] as const;
+const videoOutputs = ['mp4', 'mkv', 'webm', 'gif'] as const;
 const videoRoutes = [...videoOutputs, ...audioOutputs] as const;
 export const imageOutputs = ['jpg', 'png', 'webp', 'bmp', 'tiff'] as const;
 // Implemented routes. Native providers independently validate file contents.
@@ -79,6 +79,7 @@ export function outputGroups(input: InputFormat): { label: string; formats: read
 }
 
 export function outputHelp(input: InputFormat, output: OutputFormat): string {
+  if (output === 'gif') return 'Animated GIF with no audio. Loops continuously. Long or high-resolution clips can produce large files.';
   if (isTextInput(input)) return output === 'pdf' ? 'Paginated A4 PDF with an embedded font. Latin, Greek and Cyrillic text are supported where the font has glyphs; complex scripts, combining sequences and missing glyphs produce an error.' : 'Local UTF-8 output. Basic structure is preserved where supported; formatting may change.';
   if (input === 'pdf') {
     return output === 'png' || output === 'jpg'

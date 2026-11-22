@@ -48,13 +48,18 @@ export default function Converter({ state, dispatch, busy, conversion: c }: {
       <label className="sr-only" htmlFor="output-format">Output format</label>
       <select id="output-format" value={state.output} disabled={!file || selecting || locked || ((mediaInput || imageInput) && inspecting) || (mediaInput && !c.engine?.ready)} aria-describedby="output-help output-availability" onChange={e => dispatch({ type: 'output', format: e.target.value })}>
         {!file && <option value="">Choose a file first</option>}
-        {file && outputGroups(file.format).map(group => <optgroup key={group.label} label={group.label}>{group.formats.map(format => {
+        {file && outputGroups(file.format).map(group => <optgroup key={group.label} label={group.label}>{group.formats.filter(format=>format!=='gif' || Boolean(c.media?.video && c.formats.find(item=>item.format==='gif')?.available)).map(format => {
           const available = pdfInput && c.pdf && !c.pdf.hasText ? format === 'png' || format === 'jpg' : !mediaInput || c.formats.find(item => item.format === format)?.available;
           return <option key={format} value={format} disabled={!available}>{format.toUpperCase()}{!available ? ' — unavailable' : ''}</option>;
         })}</optgroup>)}
       </select>
       <p className="field-help" id="output-help">{file && state.output ? outputHelp(file.format, state.output) : 'Compatible formats appear after selection.'}</p>
       <p className="field-help" id="output-availability">{mediaInput ? c.availability?.reason : imageInput ? imageOutputHelp(c.image, state.output) : textInput && state.output === 'txt' ? 'TXT retains readable text and image alt text.' : ''}</p>
+      {state.output==='gif' && <div className="custom-page-size">
+        <div><label className="field-label" htmlFor="gif-size">Maximum edge</label><select id="gif-size" disabled={locked || selecting || inspecting} value={c.gifOptions.maxEdge} onChange={e=>c.setGifOptions(previous=>({...previous,maxEdge:Number(e.target.value)}))}>{[320,480,640,960].map(edge=><option key={edge} value={edge}>{edge} px</option>)}</select></div>
+        <div><label className="field-label" htmlFor="gif-fps">Frame rate</label><select id="gif-fps" disabled={locked || selecting || inspecting} value={c.gifOptions.fps} onChange={e=>c.setGifOptions(previous=>({...previous,fps:Number(e.target.value)}))}>{[10,15,20].map(fps=><option key={fps} value={fps}>{fps} fps</option>)}</select></div>
+        <p className="field-help numeric-value" role="status">{c.gifSize?`${c.gifSize.width.toLocaleString()} × ${c.gifSize.height.toLocaleString()} px at ${c.gifOptions.fps} fps. Aspect ratio and display orientation preserved; no upscaling.`:'Inspecting video dimensions…'} GIF frame timing is rounded to hundredths of a second.</p>
+      </div>}
       {pdfInput && c.pdf && !c.pdf.hasText && <p className="field-help">No extractable text found. OCR is not supported; choose PNG or JPEG to render pages.</p>}
       {pdfInput && (state.output === 'png' || state.output === 'jpg') && <div className="option-field">
         <label className="field-label" htmlFor="pdf-pages">Pages to render</label>

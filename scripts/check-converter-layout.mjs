@@ -44,6 +44,25 @@ try {
   if(name==='Invalid range')assert.ok(html.includes('aria-invalid="true"'));
   fixtures.push([name,html]);
  }
+ const {defaultGifOptions,gifDimensions}=await server.ssrLoadModule('/src/converter/gif.ts');
+ const {JobStatus}=await server.ssrLoadModule('/src/converter/ConversionControls.tsx');
+ const palette=render(h(JobStatus,{controller:{...base,job:{id:1,format:'gif',phase:'running',percent:null,seconds:0,duration:60,message:'Analyzing clip colors to generate a GIF palette…',inputPath:'C:\\Media\\clip.mp4'}}}));
+ assert.ok(palette.includes('Progress is indeterminate for this stage.'));assert.ok(!palette.includes('Duration unavailable'));assert.ok(!/<progress[^>]*value=/.test(palette));
+ for(const [name,geometry,busy,hasVideo] of [
+  ['GIF demo',{width:1920,height:1080},false,true],
+  ['GIF worst case portrait',{width:1080,height:1920},true,true],
+  ['GIF small source',{width:80,height:45},false,true],
+  ['GIF unavailable stream',null,false,false],
+ ]) {
+  const formats=[{format:'gif',available:hasVideo,reason:hasVideo?null:'No actual video stream was found.'}];
+  const media={video:hasVideo?{index:0,codec:'h264'}:null,audio:null,duration:0.6,formats,videoGeometry:geometry};
+  const state={...initialSelection,file:{...files[0],name:files[0].name.replace('.png','.mp4'),format:'mp4',category:'video'},output:hasVideo?'gif':'mp4'};
+  const html=view('Converter',h(Converter,{state,dispatch:noop,busy:{current:false},conversion:{...base,engine:{ready:true},gifOptions:defaultGifOptions,gifSize:gifDimensions(geometry,defaultGifOptions),setGifOptions:noop,media,formats,busy,availability:formats[0]}}));
+  assert.equal(html.includes('value="gif"'),hasVideo);
+  if(hasVideo){assert.ok(html.includes('id="gif-size"'));assert.ok(html.includes('id="gif-fps"'));assert.ok(html.includes('Loops continuously'));assert.ok(html.includes('10 fps'));assert.ok(!html.includes('Audio bitrate'));}
+  if(name==='GIF worst case portrait')assert.ok(html.includes('270 × 480 px'));
+  fixtures.push([name,html]);
+ }
  const {FileCard}=await server.ssrLoadModule('/src/converter/FileSummary.tsx');
  const card=render(h(FileCard,{file:{...files[0],category:'image',format:'png'},preview:{status:'ready',path:files[0].path,image:{dataUrl:'data:image/png;base64,aA==',width:80,height:40,sourceWidth:1200,sourceHeight:600}},onPreviewError:noop,actions:h('button',null,'Remove')}));
  assert.ok(card.includes('<img'));assert.ok(card.includes('1,200'));assert.ok(card.includes('Remove'));assert.ok(card.includes(files[0].name));

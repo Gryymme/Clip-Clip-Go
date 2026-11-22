@@ -28,13 +28,13 @@ test('unknown, absent and misleading final extensions are rejected', () => {
 
 test('compatibility matrix permits video outputs and audio extraction only as requested', () => {
   for (const input of inputCategories.video) {
-    assert.deepEqual(outputFormats(input), ['mp4', 'mkv', 'webm', 'mp3', 'wav', 'flac', 'm4a']);
+    assert.deepEqual(outputFormats(input), ['mp4', 'mkv', 'webm', 'gif', 'mp3', 'wav', 'flac', 'm4a']);
   }
   for (const input of inputCategories.audio) {
     assert.deepEqual(outputFormats(input), ['mp3', 'wav', 'flac', 'm4a']);
   }
   for (const input of [...inputCategories.video, ...inputCategories.audio]) {
-    for (const format of ['mp4', 'mkv', 'webm', 'mp3', 'wav', 'flac', 'm4a', 'ogg', 'mov', 'exe', '']) {
+    for (const format of ['mp4', 'mkv', 'webm', 'gif', 'mp3', 'wav', 'flac', 'm4a', 'ogg', 'mov', 'exe', '']) {
       assert.equal(isCompatible(input, format), outputFormats(input).includes(format));
     }
   }

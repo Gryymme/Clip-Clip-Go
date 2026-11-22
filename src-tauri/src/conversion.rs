@@ -246,6 +246,7 @@ pub fn command_args(
     format: OutputFormat,
     media: &MediaInfo,
 ) -> Result<Vec<String>> {
+    if format == OutputFormat::Gif { return Err("GIF requires the typed palette conversion plan.".into()); }
     if format.image() || format.text() || format == OutputFormat::Pdf {
         return Err("Image formats cannot use the audio/video runner.".into());
     }
@@ -551,6 +552,7 @@ pub fn start_conversion(
     input_path: String,
     format: OutputFormat,
     pdf_options: Option<crate::pdf::PdfOptions>,
+    gif_options: Option<crate::gif::GifOptions>,
 ) -> Result<Job> {
     let core = state.core.clone();
     state.previews.cancel_all();
@@ -626,6 +628,9 @@ pub fn start_conversion(
                 .reason
                 {
                     return Err(reason);
+                }
+                if format == OutputFormat::Gif {
+                    gif_options.unwrap_or_default().dimensions(&media)?;
                 }
                 Some(media)
             } else {
@@ -788,6 +793,21 @@ pub fn start_conversion(
                     });
                 }
             });
+            if format == OutputFormat::Gif {
+                return crate::gif::convert_to(engines,&input,&destination,&media,gif_options.unwrap_or_default(),&operation.control,&NativeRunner,Some(progress),|stage| {
+                    core.update(id,|j| {
+                        if j.phase == JobPhase::Cancelling {return;}
+                        j.seconds=0.0;j.percent=None;
+                        j.phase=if stage=="verifying" || stage=="publishing" {JobPhase::Verifying} else {JobPhase::Running};
+                        j.message=match stage {
+                            "palette"=>"Analyzing clip colors to generate a GIF palette…",
+                            "encoding"=>"Encoding animated GIF with the generated palette…",
+                            "verifying"=>"Validating GIF frames, dimensions, timing and continuous loop…",
+                            _=>"Publishing validated GIF…",
+                        }.into();
+                    });
+                });
+            }
             convert_to(
                 &engines,
                 &input,

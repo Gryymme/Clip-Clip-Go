@@ -12,6 +12,7 @@ pub enum OutputFormat {
     Mp4,
     Mkv,
     Webm,
+    Gif,
     Mp3,
     Wav,
     Flac,
@@ -29,10 +30,11 @@ pub enum OutputFormat {
     #[serde(alias = "tif")]
     Tiff,
 }
-pub const FORMATS: [OutputFormat; 7] = [
+pub const FORMATS: [OutputFormat; 8] = [
     OutputFormat::Mp4,
     OutputFormat::Mkv,
     OutputFormat::Webm,
+    OutputFormat::Gif,
     OutputFormat::Mp3,
     OutputFormat::Wav,
     OutputFormat::Flac,
@@ -45,6 +47,7 @@ impl OutputFormat {
             Self::Mp4 => "mp4",
             Self::Mkv => "mkv",
             Self::Webm => "webm",
+            Self::Gif => "gif",
             Self::Mp3 => "mp3",
             Self::Wav => "wav",
             Self::Flac => "flac",
@@ -89,6 +92,7 @@ impl OutputFormat {
             | Self::Txt
             | Self::Md => (None, ""),
             Self::Pdf => (None, ""),
+            Self::Gif => (Some("gif"), ""),
         }
     }
 }
@@ -148,20 +152,23 @@ pub fn availability(
     video_input: bool,
 ) -> Availability {
     let (video_codec, audio_codec) = format.codecs();
+    let visual = format.video() || format == OutputFormat::Gif;
     let reason = if format.image() || format.text() {
         Some("Image outputs require an image input and the built-in image converter.".into())
-    } else if format.video() && !video_input {
+    } else if visual && !video_input {
         Some("Audio inputs offer audio outputs only.".into())
-    } else if format.video() && media.is_some_and(|m| m.video.is_none()) {
+    } else if visual && media.is_some_and(|m| m.video.is_none()) {
         Some("No actual video stream was found.".into())
-    } else if !format.video() && media.is_some_and(|m| m.audio.is_none()) {
+    } else if !visual && media.is_some_and(|m| m.audio.is_none()) {
         Some("No audio stream is available to convert or extract.".into())
+    } else if format == OutputFormat::Gif && media.is_some_and(|m| m.video_geometry.is_none()) {
+        Some("Video dimensions or display transform are unavailable for GIF output.".into())
     } else {
         let mut required = Vec::new();
         if let Some(codec) = video_codec {
             required.push(codec);
         }
-        if !format.video() || media.is_none_or(|m| m.audio.is_some()) {
+        if format != OutputFormat::Gif && (!format.video() || media.is_none_or(|m| m.audio.is_some())) {
             required.push(audio_codec);
         }
         let missing: Vec<_> = required
@@ -238,9 +245,12 @@ pub struct StreamInfo {
     pub codec: String,
 }
 #[derive(Clone, Debug, Serialize)]
+pub struct VideoGeometry { pub width: f64, pub height: f64 }
+#[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MediaInfo {
     pub duration: Option<f64>,
+    pub video_geometry: Option<VideoGeometry>,
     pub video: Option<StreamInfo>,
     pub audio: Option<StreamInfo>,
     pub container: String,
@@ -259,7 +269,14 @@ struct ProbeStream {
     codec_name: Option<String>,
     duration: Option<String>,
     disposition: Option<Disposition>,
+    width: Option<u32>,
+    height: Option<u32>,
+    sample_aspect_ratio: Option<String>,
+    #[serde(default)]
+    side_data_list: Vec<DisplayTransform>,
 }
+#[derive(Deserialize)]
+struct DisplayTransform { rotation: Option<f64> }
 #[derive(Deserialize)]
 struct Disposition {
     #[serde(default)]
@@ -287,6 +304,18 @@ pub fn parse_probe(bytes: &[u8]) -> Result<MediaInfo> {
             codec: s.codec_name.clone()?,
         })
     };
+    let video_geometry = actual_video.and_then(|s| {
+        let (w,h)=(f64::from(s.width?),f64::from(s.height?));
+        let sar = match s.sample_aspect_ratio.as_deref() {
+            None | Some("N/A" | "0:1") => 1.0,
+            Some(value) => { let (n,d)=value.split_once(':')?; n.parse::<f64>().ok()? / d.parse::<f64>().ok()? }
+        };
+        let rotation=s.side_data_list.iter().find_map(|d|d.rotation).unwrap_or(0.0);
+        if w<=0.0 || h<=0.0 || !sar.is_finite() || sar<=0.0 || !rotation.is_finite() || (rotation/90.0-(rotation/90.0).round()).abs()>0.001 { return None; }
+        let (width,height)=if (rotation/90.0).round() as i32 % 2 != 0 {(h,w*sar)} else {(w*sar,h)};
+        if !width.is_finite() || !height.is_finite() {return None;}
+        Some(VideoGeometry{width,height})
+    });
     let video = actual_video.and_then(stream);
     let audio = first_audio.and_then(stream);
     if video.is_none() && audio.is_none() {
@@ -319,6 +348,7 @@ pub fn parse_probe(bytes: &[u8]) -> Result<MediaInfo> {
     }
     Ok(MediaInfo {
         duration,
+        video_geometry,
         video,
         audio,
         container,
@@ -331,7 +361,7 @@ pub fn probe(
     runner: &dyn Runner,
     control: &Control,
 ) -> Result<MediaInfo> {
-    let args=["-v","error","-protocol_whitelist","file,pipe","-format_whitelist","mov,matroska,webm,mp3,wav,flac,ogg","-show_entries","format=duration,format_name:stream=index,codec_type,codec_name,duration:stream_disposition=attached_pic","-of","json"];
+    let args=["-v","error","-protocol_whitelist","file,pipe","-format_whitelist","mov,matroska,webm,mp3,wav,flac,ogg","-show_entries","format=duration,format_name:stream=index,codec_type,codec_name,duration,width,height,sample_aspect_ratio:stream_disposition=attached_pic:stream_side_data=rotation","-of","json"];
     let mut args: Vec<String> = args.iter().map(|s| s.to_string()).collect();
     args.push(path.to_string_lossy().into_owned());
     let result = runner.run(

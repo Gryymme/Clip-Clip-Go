@@ -2,7 +2,7 @@ import type { OutputFormat } from './formats.ts';
 import { imageOutputs } from './formats.ts';
 import type { SelectedFile } from './selection.ts';
 
-export const engineFormats = ['mp4', 'mkv', 'webm', 'mp3', 'wav', 'flac', 'm4a'] as const;
+export const engineFormats = ['mp4', 'mkv', 'webm', 'gif', 'mp3', 'wav', 'flac', 'm4a'] as const;
 export type EngineFormat = (typeof engineFormats)[number];
 export type ImageFormat = (typeof imageOutputs)[number];
 export type TextFormat = 'md' | 'html' | 'txt';
@@ -18,6 +18,7 @@ export interface EngineReport {
   folder: string | null; formats: Availability[]; message: string;
 }
 export interface MediaInfo {
+  videoGeometry?: {width:number;height:number} | null;
   duration: number | null; video: { index: number; codec: string } | null;
   audio: { index: number; codec: string } | null; container: string; formats: Availability[];
 }

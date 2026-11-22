@@ -5,6 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "icons:generate": "node scripts/generate-icons.mjs",
+    "prebuild": "npm run icons:generate",
+    "predesktop:dev": "npm run icons:generate",
+    "predesktop:build": "npm run icons:generate",
     "engines:prepare": "node scripts/prepare-engines.mjs",
     "engines:verify": "node scripts/prepare-engines.mjs --verify-only",
     "downloader:prepare": "node scripts/prepare-downloader.mjs",

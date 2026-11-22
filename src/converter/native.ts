@@ -1,3 +1,4 @@
+import type {GifOptions} from './gif';
 import type {PageSizePayload} from './pageSize';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { inputExtensions } from './formats';
@@ -25,8 +26,8 @@ export async function probeImage(inputPath: string): Promise<ImageInfo> {
 export async function probePdf(inputPath: string): Promise<PdfInfo> { desktop(); return invoke('probe_pdf', { inputPath }); }
 export async function selectImages(): Promise<NativeFile[] | null> { desktop(); return invoke('select_images'); }
 export async function startImagesPdf(inputPaths: string[], pageSize: PageSizePayload): Promise<ConversionJob> { desktop(); return invoke('start_images_pdf', { inputPaths, pageSize }); }
-export async function startConversion(inputPath: string, format: ConversionFormat, pages = ''): Promise<ConversionJob> {
-  desktop(); return invoke('start_conversion', { inputPath, format, pdfOptions: { pages } });
+export async function startConversion(inputPath: string, format: ConversionFormat, pages = '', gifOptions?:GifOptions): Promise<ConversionJob> {
+  desktop(); return invoke('start_conversion', { inputPath, format, pdfOptions: { pages }, gifOptions:format==='gif'?gifOptions:undefined });
 }
 export async function conversionStatus(): Promise<ConversionJob | null> { desktop(); return invoke('get_conversion_status'); }
 export async function cancelConversion(id: number): Promise<void> { desktop(); return invoke('cancel_conversion', { id }); }

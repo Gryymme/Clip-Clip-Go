@@ -85,7 +85,7 @@ button { touch-action: manipulation; }
 .sidebar-navigation { flex: 1 1 0; min-block-size: 0; overflow-y: auto; overflow-x: hidden; padding: var(--space-2); scrollbar-width: thin; }
 .navigation-list { display: grid; align-content: start; gap: var(--space-1); padding: var(--space-1); margin: 0; list-style: none; }
 .navigation-list li { min-inline-size: 0; }
-.navigation-list li:nth-child(4) { margin-block-start: var(--space-5); }
+.navigation-list .navigation-group-start { margin-block-start: var(--space-5); }
 .navigation-button { display: flex; align-items: center; gap: var(--space-3); inline-size: 100%; min-block-size: 2.875rem; padding: var(--space-2) var(--space-3); border: 0; border-radius: var(--radius-control); text-align: start; line-height: 1.4; font-size: var(--text-small); font-weight: var(--weight-medium); background: transparent; color: var(--color-secondary); cursor: pointer; }
 .navigation-button span { min-inline-size: 0; overflow-wrap: anywhere; }
 .navigation-button[aria-current="page"] { background: var(--color-accent-surface); color: var(--color-accent-text); font-weight: var(--weight-bold); }
@@ -189,7 +189,7 @@ progress:indeterminate::-webkit-progress-value { background: transparent; }
   .brand-name { font-size: 1.5rem; }
   .sidebar-navigation { flex-basis: auto; padding: var(--space-1) var(--space-2); }
   .navigation-list { grid-template-columns: repeat(3,minmax(0,1fr)); gap: var(--space-1); }
-  .navigation-list li:nth-child(4) { margin-block-start: 0; }
+  .navigation-list .navigation-group-start { margin-block-start: 0; }
   .navigation-button { padding: var(--space-2); gap: var(--space-2); font-size: .875rem; }
   .navigation-button .icon { inline-size: 1rem; block-size: 1rem; }
   main { padding: var(--space-3); }

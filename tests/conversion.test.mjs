@@ -31,7 +31,7 @@ test('only audio/video categories and typed engine formats are convertible', () 
   for (const category of ['audio', 'video']) assert.equal(isMediaFile({ category }), true);
   for (const category of ['image', 'document']) assert.equal(isMediaFile({ category }), false);
   assert.equal(isMediaFile(null), false);
-  for (const format of ['mp4', 'mkv', 'webm', 'mp3', 'wav', 'flac', 'm4a']) assert.equal(isEngineFormat(format), true);
+  for (const format of ['mp4', 'mkv', 'webm', 'gif', 'mp3', 'wav', 'flac', 'm4a']) assert.equal(isEngineFormat(format), true);
   for (const format of ['png', 'pdf', 'csv', 'ogg', '']) assert.equal(isEngineFormat(format), false);
 });
 
