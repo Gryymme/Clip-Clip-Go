@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-queue-counts"
+description = "Enables the queue_counts command without any pre-configured scope."
+commands.allow = ["queue_counts"]
+
+[[permission]]
+identifier = "deny-queue-counts"
+description = "Denies the queue_counts command without any pre-configured scope."
+commands.deny = ["queue_counts"]

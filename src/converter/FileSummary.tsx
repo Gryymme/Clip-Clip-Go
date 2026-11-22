@@ -1,3 +1,4 @@
+import {displayPath} from '../pathDisplay';
 import type { ReactNode } from 'react';
 import Icon from '../components/Icon';
 import { formatFileSize, type SelectedFile } from './selection';
@@ -5,7 +6,7 @@ import { displayDuration } from './conversion';
 import type { ConversionController } from './useConversion';
 import type { PreviewState } from './preview';
 export const readableSize = (bytes: string) => formatFileSize(bytes).split(' (')[0];
-export function Thumbnail({ file, state, onError }: { file: SelectedFile; state: PreviewState; onError: () => void }) {
+export function Thumbnail({ file, state, onError }: { file: Pick<SelectedFile, 'category'>; state: PreviewState; onError: () => void }) {
   const name = file.category === 'audio' ? 'audio' : file.category === 'document' ? 'document' : file.category === 'video' ? 'video' : 'image';
   const caption = state.status === 'loading' ? 'Loading…' : state.status === 'fallback' ? 'No preview' : null;
   return <figure className="file-preview" aria-label={caption ? `${file.category} preview: ${caption}` : `${file.category} file`}>
@@ -24,7 +25,7 @@ export function FileCard({file,preview,onPreviewError,actions,facts}: {file:Sele
     <div className="file-summary-content">
       <h3 className="selected-file-name" dir="auto">{file.name}</h3>
       <p className="file-facts">{facts ?? <><span>{file.format.toUpperCase()} image</span><span>{readableSize(file.sizeBytes)}</span>{preview.status === 'ready' && preview.image.sourceWidth && preview.image.sourceHeight && <span>{preview.image.sourceWidth.toLocaleString()} × {preview.image.sourceHeight.toLocaleString()} px</span>}</>}</p>
-      <details className="file-location"><summary>File details</summary><dl><div><dt>Full path</dt><dd dir="auto">{file.path}</dd></div><div><dt>Exact size</dt><dd>{formatFileSize(file.sizeBytes)}</dd></div></dl></details>
+      <details className="file-location"><summary>File details</summary><dl><div><dt>Full path</dt><dd dir="auto">{displayPath(file.path)}</dd></div><div><dt>Exact size</dt><dd>{formatFileSize(file.sizeBytes)}</dd></div></dl></details>
     </div>
     <div className="file-summary-actions">{actions}</div>
   </div>;

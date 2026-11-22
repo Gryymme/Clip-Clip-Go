@@ -3,6 +3,68 @@ use crate::engine::{encoder_names, parse_probe, Availability};
 use crate::process::Captured;
 use std::{collections::VecDeque, fs, time::Duration};
 
+#[test]
+fn session_queue_ownership_inputs_destinations_and_shutdown() {
+    let dir = test_dir();
+    let input = dir.path().join("source.txt");
+    fs::write(&input, "source").unwrap();
+    let core = Arc::new(Core::default());
+    core.remember(&input);
+    assert!(core.authorize(input.to_str().unwrap()).is_ok());
+    let destination = dir.path().join("queued.html");
+    core.inner.lock().unwrap().destinations.insert(destination.clone());
+    assert!(core.destination(destination.to_str().unwrap()).is_ok());
+    // Two submitted jobs may name the same destination. The later one must recheck at start.
+    fs::write(&destination, "earlier output").unwrap();
+    assert!(core.destination(destination.to_str().unwrap()).is_err());
+    assert_eq!(fs::read_to_string(&destination).unwrap(), "earlier output");
+    fs::remove_file(&input).unwrap();
+    assert!(core.authorize(input.to_str().unwrap()).is_err());
+    assert!(!core.owned_output(&destination));
+    core.record_output(&destination);
+    assert!(core.owned_output(&destination));
+    assert!(!core.owned_output(&dir.path().join("unrelated.html")));
+    let lease = core.reserve().unwrap();
+    let inspection = core.inspect().unwrap();
+    assert!(core.reserve().is_err());
+    assert!(!core.settled());
+    core.stop_submissions();
+    core.shutdown();
+    assert!(lease.control.check().is_err());
+    assert!(inspection.control.check().is_err());
+    assert!(core.reserve().is_err());
+    assert!(core.inspect().is_err());
+    drop(lease);
+    assert!(!core.settled());
+    drop(inspection);
+    assert!(core.settled());
+}
+
+#[test]
+fn session_queue_representative_real_engine_and_collision() {
+    let (ffmpeg, ffprobe) = crate::bundled::test_sidecars().unwrap();
+    let engines = engine::inspect_engines(ffmpeg, ffprobe, None, &NativeRunner, &Control::default()).unwrap();
+    let dir = test_dir();
+    let input = dir.path().join("tone.wav");
+    let mut args = ["-hide_banner", "-nostdin", "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=0.15"].map(String::from).to_vec();
+    args.push(input.to_string_lossy().into_owned());
+    assert!(NativeRunner.run(&engines.ffmpeg, &args, &Control::default(), Some(Duration::from_secs(15)), None).unwrap().success);
+    let core = Arc::new(Core::default());
+    let operation = core.reserve().unwrap();
+    let media = engine::probe(&engines, &input, &NativeRunner, &operation.control).unwrap();
+    let destination = dir.path().join("tone.flac");
+    let output = convert_to(&engines, &input, &destination, OutputFormat::Flac, &media, &operation.control, &NativeRunner, None, || {}).unwrap();
+    assert!(output.is_file());
+    drop(operation);
+    let original = fs::read(&output).unwrap();
+    let next = core.reserve().unwrap();
+    assert!(convert_to(&engines, &input, &destination, OutputFormat::Flac, &media, &next.control, &NativeRunner, None, || {}).is_err());
+    assert_eq!(fs::read(&output).unwrap(), original);
+    drop(next);
+    assert!(core.settled());
+    assert!(fs::read_dir(dir.path()).unwrap().all(|entry| !entry.unwrap().file_name().to_string_lossy().starts_with(".clip-clip-go-")));
+}
+
 fn test_dir() -> tempfile::TempDir {
     let parent = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/conversion-tests");
     fs::create_dir_all(&parent).unwrap();

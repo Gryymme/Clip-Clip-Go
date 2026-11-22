@@ -17,7 +17,6 @@ pub enum SelectionError {
     PermissionDenied,
     NotAFile,
     MetadataError,
-    Busy,
 }
 
 fn file_metadata(path: &Path) -> Result<MediaFile, SelectionError> {
@@ -43,9 +42,6 @@ pub async fn select_images(
     state: tauri::State<'_, crate::conversion::Runtime>,
 ) -> Result<Option<Vec<MediaFile>>, SelectionError> {
     let core = state.core.clone();
-    if core.busy() {
-        return Err(SelectionError::Busy);
-    }
     tauri::async_runtime::spawn_blocking(move || {
         let chosen = window
             .dialog()
@@ -86,9 +82,6 @@ pub async fn select_pdfs(
     state: tauri::State<'_, crate::conversion::Runtime>,
 ) -> Result<Option<Vec<MediaFile>>, SelectionError> {
     let core = state.core.clone();
-    if core.busy() {
-        return Err(SelectionError::Busy);
-    }
     tauri::async_runtime::spawn_blocking(move || {
         let chosen = window
             .dialog()
@@ -131,9 +124,6 @@ pub async fn select_media_file(
     state: tauri::State<'_, crate::conversion::Runtime>,
 ) -> Result<Option<MediaFile>, SelectionError> {
     let core = state.core.clone();
-    if core.busy() {
-        return Err(SelectionError::Busy);
-    }
     tauri::async_runtime::spawn_blocking(move || {
         let extensions: Vec<&str> = extensions.iter().map(String::as_str).collect();
         let chosen = window
@@ -264,7 +254,7 @@ pub async fn claim_drop(
         &mut state.drops.lock().unwrap(),
         &paths,
         images_only || pdfs_only.unwrap_or(false),
-        state.core.busy(),
+        false,
     )?;
     let core = state.core.clone();
     tauri::async_runtime::spawn_blocking(move || {

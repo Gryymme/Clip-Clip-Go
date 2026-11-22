@@ -7,6 +7,12 @@
     "main"
   ],
   "permissions": [
+    "allow-choose-queue-destination",
+    "allow-prepare-download",
+    "allow-discard-download",
+    "allow-queue-counts",
+    "allow-confirm-queue-close",
+    "allow-open-queue-output",
     "allow-inspect-download",
     "allow-inspect-browser-download",
     "allow-companion-status",

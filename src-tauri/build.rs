@@ -89,6 +89,12 @@ fn main() {
     }
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
+            "choose_queue_destination",
+            "prepare_download",
+            "discard_download",
+            "queue_counts",
+            "confirm_queue_close",
+            "open_queue_output",
             "inspect_download",
             "inspect_browser_download",
             "companion_status",

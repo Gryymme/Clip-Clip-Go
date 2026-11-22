@@ -1,9 +1,10 @@
+import {useQueue, queue, submitDownload} from '../queue/session';
 import {useEffect,useRef,useState} from 'react';
 import {invoke} from '@tauri-apps/api/core';
 import {nativeError} from '../converter/conversion';
 import {active,mergeJob,initialSettings,settingsError,urlError,contract,effectiveAudio,lossy,defaultName,type DownloadSettings,type DownloadJob,type DownloadMedia,type DownloadPlan,type Capabilities} from './model';
 
-export function useDownloader(engineReady:boolean,otherBusy:boolean){
+export function useDownloader(engineReady:boolean){
  const [url,setUrl]=useState(''),[job,setJob]=useState<DownloadJob|null>(null),[inspection,setInspection]=useState<{id:number;media:DownloadMedia}|null>(null);
  const [settings,setSettings]=useState(initialSettings),[capabilities,setCapabilities]=useState<Capabilities|null>(null),[error,setError]=useState<string|null>(null),[pending,setPending]=useState(false),[folder,setFolder]=useState<string|null>(null),[name,setName]=useState('media'),[plan,setPlan]=useState<DownloadPlan|null>(null),[planning,setPlanning]=useState(false),[planError,setPlanError]=useState<string|null>(null);
  const lock=useRef(false),initial=useRef<Promise<DownloadJob|null>|null>(null),capRequest=useRef<Promise<Capabilities>|null>(null),revision=useRef(0);
@@ -11,6 +12,13 @@ export function useDownloader(engineReady:boolean,otherBusy:boolean){
  const planKey=inspection?JSON.stringify([inspection.id,settings]):null;
  const visiblePlan=planKey===plannedKey?plan:null;
  const busy=pending||active(job);
+ const [submittedId,setSubmittedId]=useState<string>();
+ const entries=useQueue(), lastEntry=entries.find(e=>e.id===submittedId)??[...entries].reverse().find(e=>e.type==='Downloader');
+ const queueBusy=entries.some(e=>['running','cancelling'].includes(e.status));
+ const otherBusy=false;
+ const outputEntry=entries.find(e=>e.download&&['running','cancelling'].includes(e.status))??[...entries].reverse().find(e=>e.download);
+ const outputJob=outputEntry?.status==='cancelling'&&outputEntry.download?{...outputEntry.download,stage:'cancelling',message:'Cancelling and cleaning up…',percent:null}:outputEntry?.download;
+ const visibleJob=active(job)?job:outputJob??job;
  useEffect(()=>{let live=true;initial.current??=invoke<DownloadJob|null>('download_status');initial.current.then(j=>{if(live)setJob(old=>mergeJob(old,j));}).catch(()=>{});return()=>{live=false;};},[]);
  useEffect(()=>{if(!engineReady)return;let live=true;capRequest.current??=invoke<Capabilities>('download_capabilities');capRequest.current.then(c=>{if(live){if(JSON.stringify(c.contract)!==JSON.stringify(contract)){// Object key ordering differs across the IPC serializer; compare canonical data.
  const canonical=(x:unknown):string=>JSON.stringify(x,(_k,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.fromEntries(Object.entries(v).sort(([a],[b])=>a.localeCompare(b))):v);
@@ -35,8 +43,16 @@ export function useDownloader(engineReady:boolean,otherBusy:boolean){
   return next;
  });}
  async function chooseFolder(){if(lock.current||busy||otherBusy)return;lock.current=true;setPending(true);try{const path=await invoke<string|null>('choose_download_folder');if(path)setFolder(path);}catch(cause){setError(nativeError(cause));}finally{lock.current=false;setPending(false);}}
- async function start(){if(lock.current||busy||otherBusy||!inspection||!visiblePlan||localError||!folder||!name.trim()||name.length>100)return;lock.current=true;setPending(true);setError(null);try{const next=await invoke<DownloadJob>('start_download',{inspectionId:inspection.id,settings,name});setJob(old=>mergeJob(old,next));}catch(cause){setError(nativeError(cause));}finally{lock.current=false;setPending(false);}}
- async function cancel(){if(!job||!active(job))return;try{await invoke('cancel_download',{id:job.id});}catch(cause){setError(nativeError(cause));}}
- return {url,setUrl,job,inspection,settings,change,capabilities,error,pending,busy,otherBusy,folder,name,setName,plan:visiblePlan,planning,planError:localError??planError,inspect,inspectBrowser,chooseFolder,start,cancel};
+ async function start(){
+  if(lock.current||busy||!inspection||!visiblePlan||localError||!folder||!name.trim()||name.length>100)return;
+  lock.current=true;setPending(true);setError(null);
+  try{setSubmittedId(await submitDownload(inspection.id,settings,name,inspection.media.title,inspection.media.source));}
+  catch(cause){setError(nativeError(cause));}finally{lock.current=false;setPending(false);}
+ }
+ async function cancel(){
+  if(active(job)){try{await invoke('cancel_download',{id:job!.id});}catch(cause){setError(nativeError(cause));}}
+  else if(outputEntry)queue.cancel(outputEntry.id);
+ }
+ return {browserSource:job?.browserSource,queueBusy,lastEntry,url,setUrl,job:visibleJob,inspection,settings,change,capabilities,error,pending,busy,otherBusy,folder,name,setName,plan:visiblePlan,planning,planError:localError??planError,inspect,inspectBrowser,chooseFolder,start,cancel};
 }
 export type DownloaderController=ReturnType<typeof useDownloader>;

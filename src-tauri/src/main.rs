@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod session;
 mod bundled;
 mod companion;
 mod conversion;
@@ -18,6 +19,7 @@ mod text;
 
 fn main() {
     tauri::Builder::default()
+        .manage(session::Session::default())
         .manage(conversion::Runtime::default())
         .manage(downloader::Runtime::default())
         .manage(companion::Runtime::default())
@@ -31,6 +33,7 @@ fn main() {
         })
         .plugin(tauri_plugin_dialog::init())
         .on_window_event(|window, event| {
+            session::close_requested(window, event);
             if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event {
                 use tauri::Manager;
                 let state = window.state::<conversion::Runtime>();
@@ -42,6 +45,12 @@ fn main() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            conversion::choose_queue_destination,
+            downloader::prepare_download,
+            downloader::discard_download,
+            session::queue_counts,
+            session::confirm_queue_close,
+            session::open_queue_output,
             downloader::inspect_download,
             downloader::inspect_browser_download,
             companion::companion_status,

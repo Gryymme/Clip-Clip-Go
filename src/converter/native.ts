@@ -25,9 +25,9 @@ export async function probeImage(inputPath: string): Promise<ImageInfo> {
 }
 export async function probePdf(inputPath: string): Promise<PdfInfo> { desktop(); return invoke('probe_pdf', { inputPath }); }
 export async function selectImages(): Promise<NativeFile[] | null> { desktop(); return invoke('select_images'); }
-export async function startImagesPdf(inputPaths: string[], pageSize: PageSizePayload): Promise<ConversionJob> { desktop(); return invoke('start_images_pdf', { inputPaths, pageSize }); }
-export async function startConversion(inputPath: string, format: ConversionFormat, pages = '', gifOptions?:GifOptions): Promise<ConversionJob> {
-  desktop(); return invoke('start_conversion', { inputPath, format, pdfOptions: { pages }, gifOptions:format==='gif'?gifOptions:undefined });
+export async function startImagesPdf(inputPaths: string[], pageSize: PageSizePayload, outputPath: string): Promise<ConversionJob> { desktop(); return invoke('start_images_pdf', { inputPaths, pageSize, outputPath }); }
+export async function startConversion(inputPath: string, format: ConversionFormat, outputPath: string, pages = '', gifOptions?:GifOptions): Promise<ConversionJob> {
+  desktop(); return invoke('start_conversion', { inputPath, format, outputPath, pdfOptions: { pages }, gifOptions:format==='gif'?gifOptions:undefined });
 }
 export async function conversionStatus(): Promise<ConversionJob | null> { desktop(); return invoke('get_conversion_status'); }
 export async function cancelConversion(id: number): Promise<void> { desktop(); return invoke('cancel_conversion', { id }); }
@@ -35,5 +35,7 @@ export async function cancelConversion(id: number): Promise<void> { desktop(); r
 export async function claimDrop(paths:string[],imagesOnly:boolean):Promise<{files:NativeFile[];rejected:string[]}> {desktop();return invoke('claim_drop',{paths,imagesOnly});}
 
 export async function selectPdfs(): Promise<NativeFile[] | null> { desktop(); return invoke('select_pdfs'); }
-export async function startMergePdf(inputPaths: string[]): Promise<ConversionJob> { desktop(); return invoke('start_merge_pdf', { inputPaths }); }
+export async function startMergePdf(inputPaths: string[], outputPath: string): Promise<ConversionJob> { desktop(); return invoke('start_merge_pdf', { inputPaths, outputPath }); }
 export async function claimPdfDrop(paths: string[]): Promise<{files:NativeFile[];rejected:string[]}> { desktop(); return invoke('claim_drop', { paths, imagesOnly:false, pdfsOnly:true }); }
+
+export async function chooseQueueDestination(suggested: string, format: ConversionFormat, folderOutput = false): Promise<string | null> { desktop(); return invoke('choose_queue_destination', {suggested, format, folderOutput}); }

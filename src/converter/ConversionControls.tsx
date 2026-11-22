@@ -1,3 +1,5 @@
+import {displayPath, displayPathText} from '../pathDisplay';
+import {QueueNotice} from '../queue/Queue';
 import type { ConversionController } from './useConversion';
 import { displayDuration, isImageFormat, isTextFormat, jobIsBusy } from './conversion';
 import type { SelectedFile } from './selection';
@@ -5,21 +7,22 @@ import type { SelectedFile } from './selection';
 export function EngineSetup({ controller: c, selecting }: { controller: ConversionController; selecting: boolean }) {
   const disabled = selecting || c.busy || c.engineLoading || c.probing;
   if (c.engineLoading) return <p className="field-help" role="status">Checking audio/video engines…</p>;
-  if (!c.engine?.ready) return <div className="selection-error" role="alert"><p>{c.engine?.message ?? 'Repair ClipClipGO to restore its audio/video engines.'}</p><button className="button" type="button" disabled={disabled} onClick={() => void c.configure('bundled')}>Check engines again</button></div>;
+  if (!c.engine?.ready) return <div className="selection-error" role="alert"><p>{displayPathText(c.engine?.message ?? 'Repair ClipClipGO to restore its audio/video engines.')}</p><button className="button" type="button" disabled={disabled} onClick={() => void c.configure('bundled')}>Check engines again</button></div>;
   return <details className="supported-inputs field-help engine-details"><summary>Audio/video engine details</summary><p className="engine-version">{c.engine.ffmpegVersion}</p><p className="engine-version">{c.engine.ffprobeVersion}</p></details>;
 }
 export function JobStatus({ controller: c }: { controller: ConversionController }) {
-  if (!c.job) return null;
+  if (!c.job) return c.lastEntry ? <QueueNotice entry={c.lastEntry} /> : null;
   const job = c.job, active = jobIsBusy(job);
   const pageOrStillJob = isImageFormat(job.format) || isTextFormat(job.format) || job.format === 'pdf' || Boolean(job.pagesTotal);
   return <section className="conversion-job workflow-section" aria-labelledby="job-heading">
+    {c.lastEntry && <QueueNotice entry={c.lastEntry} />}
     <h2 id="job-heading">{active ? 'Conversion status' : 'Last conversion'}</h2>
-    <p className="job-message" data-phase={job.phase} role={job.phase === 'failed' ? 'alert' : 'status'}>{job.message}</p>
+    <p className="job-message" data-phase={job.phase} role={job.phase === 'failed' ? 'alert' : 'status'}>{displayPathText(job.message)}</p>
     {(active || job.phase === 'succeeded') && <>
       <progress aria-label="Conversion progress" max={100} value={job.phase === 'succeeded' ? 100 : job.phase === 'running' ? job.percent ?? undefined : undefined} />
       {job.pagesTotal != null ? <p className="field-help numeric-value">{job.pagesDone ?? 0} of {job.pagesTotal} pages processed</p> : !pageOrStillJob && job.phase === 'running' && <p className="field-help numeric-value">{job.format==='gif' && job.percent===null ? 'Progress is indeterminate for this stage.' : <>{job.percent === null ? 'Duration unavailable · ' : `${Math.floor(job.percent)}% · `}{displayDuration(job.seconds)} processed</>}</p>}
     </>}
-    <details className="file-location job-paths"><summary>{job.phase === 'succeeded' ? 'Saved output details' : 'Job file details'}</summary><dl><div><dt>Input</dt><dd dir="auto">{job.inputPath}</dd></div>{job.destination && <div><dt>Destination</dt><dd dir="auto">{job.destination}</dd></div>}</dl></details>
+    <details className="file-location job-paths"><summary>{job.phase === 'succeeded' ? 'Saved output details' : 'Job file details'}</summary><dl><div><dt>Input</dt><dd dir="auto">{displayPathText(job.inputPath)}</dd></div>{job.destination && <div><dt>Destination</dt><dd dir="auto">{displayPath(job.destination)}</dd></div>}</dl></details>
     {active && <button className="button button-secondary" type="button" disabled={c.cancelling || job.phase === 'cancelling'} onClick={() => void c.cancel()}>{c.cancelling || job.phase === 'cancelling' ? 'Cancelling…' : 'Cancel conversion'}</button>}
   </section>;
 }
@@ -27,12 +30,12 @@ export function ConversionActions({ controller: c, file, imagesMode = false }: {
   const folder = !imagesMode && file?.format === 'pdf' && c.outputIsFolder;
   const disabled = imagesMode ? !c.images.length || Boolean(c.pageSizeError) || c.busy || c.adding || c.engineLoading || c.probing : !c.canConvert;
   return <>
-    {!imagesMode && c.probeError && <p className="selection-error" role="alert">{c.probeError}</p>}
-    {c.error && <p className="selection-error" role="alert">{c.error}</p>}
+    {!imagesMode && c.probeError && <p className="selection-error" role="alert">{displayPathText(c.probeError)}</p>}
+    {c.error && <p className="selection-error" role="alert">{displayPathText(c.error)}</p>}
     <section className="destination-section workflow-section" aria-labelledby="destination-heading">
       <h2 id="destination-heading">Destination</h2>
-      <div className="destination-row"><p className="field-help" id="destination-help">{c.busy ? 'A download or conversion is active. Finish or cancel it before starting another.' : folder ? 'Name a new output folder in the Save dialog. Existing folders are protected.' : 'Choose a new filename in the Save dialog. Originals and existing files are protected.'}</p>
-        <button className="button button-primary" type="button" disabled={disabled} aria-describedby="destination-help" onClick={() => void (imagesMode ? c.startImagePdf() : c.start())}>{c.starting ? 'Preparing…' : imagesMode ? 'Create PDF' : 'Convert file'}</button>
+      <div className="destination-row"><p className="field-help" id="destination-help">{c.queueBusy ? 'Choose a destination to add this configured task to the queue.' : folder ? 'Name a new output folder in the Save dialog. Existing folders are protected.' : 'Choose a new filename in the Save dialog. Originals and existing files are protected.'}</p>
+        <button className="button button-primary" type="button" disabled={disabled} aria-describedby="destination-help" onClick={() => void (imagesMode ? c.startImagePdf() : c.start())}>{c.starting ? 'Preparing…' : c.queueBusy ? 'Add to queue' : imagesMode ? 'Create PDF' : 'Convert file'}</button>
       </div>
     </section>
     <JobStatus controller={c} />

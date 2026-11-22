@@ -1,3 +1,4 @@
+import {displayPathText} from '../pathDisplay';
 import { useRef } from 'react';
 import type { Dispatch } from 'react';
 import { inputGroups, outputGroups, outputHelp, isTextInput } from './formats';
@@ -40,7 +41,7 @@ export default function Converter({ state, dispatch, busy, conversion: c }: {
         : <EmptySelectionCard title="Choose a file to convert" description="Drop one file here, or choose video, audio, an image, text or PDF." actions={chooseButton} />}
       </DropSelection>
       <p className="sr-only" role="status">{selecting ? 'Waiting for the native file dialog.' : state.notice}</p>
-      {state.error && <p className="selection-error" role="alert">{state.error}{file && ' Your previous selection is unchanged.'}</p>}
+      {state.error && <p className="selection-error" role="alert">{displayPathText(state.error)}{file && ' Your previous selection is unchanged.'}</p>}
       <details className="supported-inputs field-help"><summary>Supported formats</summary><dl>{inputGroups.map(group => <div key={group.label}><dt>{group.label}</dt><dd>{group.extensions.map(e => e.toUpperCase()).join(', ')}</dd></div>)}</dl><p>Microsoft Office and OpenDocument files are unsupported.</p></details>
     </section>
     <section className="workflow-section output-section" aria-labelledby="output-heading">

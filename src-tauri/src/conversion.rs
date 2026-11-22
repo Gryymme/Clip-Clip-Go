@@ -7,7 +7,7 @@ use std::{
     collections::HashSet,
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         Arc, Mutex,
     },
 };
@@ -17,7 +17,6 @@ use tauri_plugin_dialog::DialogExt;
 #[serde(rename_all = "camelCase")]
 pub enum JobPhase {
     Validating,
-    ChoosingDestination,
     Running,
     Verifying,
     Cancelling,
@@ -53,11 +52,15 @@ struct Inner {
     active: Option<Arc<Control>>,
     job: Option<Job>,
     selected: HashSet<PathBuf>,
+    destinations: HashSet<PathBuf>,
+    outputs: HashSet<PathBuf>,
+    inspections: Vec<Arc<Control>>,
 }
 #[derive(Default)]
 pub struct Core {
     inner: Mutex<Inner>,
     sequence: AtomicU64,
+    stopping: AtomicBool,
 }
 #[derive(Default)]
 pub struct Runtime {
@@ -72,6 +75,7 @@ pub(crate) struct Operation {
 impl Drop for Operation {
     fn drop(&mut self) {
         let mut inner = self.core.inner.lock().unwrap();
+        inner.inspections.retain(|c| !Arc::ptr_eq(c, &self.control));
         if inner
             .active
             .as_ref()
@@ -82,8 +86,12 @@ impl Drop for Operation {
     }
 }
 impl Core {
+    pub fn record_output(&self, path: &Path) { self.inner.lock().unwrap().outputs.insert(path.to_owned()); }
+    pub fn owned_output(&self, path: &Path) -> bool { self.inner.lock().unwrap().outputs.contains(path) }
+    pub fn stop_submissions(&self) { self.stopping.store(true, Ordering::SeqCst); }
     pub(crate) fn reserve(self: &Arc<Self>) -> Result<Operation> {
         let mut inner = self.inner.lock().unwrap();
+        if self.stopping.load(Ordering::SeqCst) { return Err("The application is closing.".into()); }
         if inner.active.is_some() {
             return Err("Another engine operation is in progress. Wait for it to finish.".into());
         }
@@ -93,6 +101,27 @@ impl Core {
             core: self.clone(),
             control,
         })
+    }
+    pub(crate) fn inspect(self: &Arc<Self>) -> Result<Operation> {
+        let mut inner = self.inner.lock().unwrap();
+        if self.stopping.load(Ordering::SeqCst) { return Err("The application is closing.".into()); }
+        let control = Arc::new(Control::default());
+        inner.inspections.push(control.clone());
+        Ok(Operation { core: self.clone(), control })
+    }
+    pub fn settled(&self) -> bool {
+        let inner = self.inner.lock().unwrap();
+        inner.active.is_none() && inner.inspections.is_empty()
+    }
+    fn destination(&self, path: &str) -> Result<PathBuf> {
+        let path = PathBuf::from(path);
+        if !self.inner.lock().unwrap().destinations.contains(&path) {
+            return Err("Choose the destination in the app's Save dialog.".into());
+        }
+        if path.exists() || !path.parent().is_some_and(|p| p.is_dir()) {
+            return Err("The destination exists or its folder is inaccessible. Choose a new destination.".into());
+        }
+        Ok(path)
     }
     pub fn busy(&self) -> bool {
         self.inner.lock().unwrap().active.is_some()
@@ -130,9 +159,11 @@ impl Core {
         self.inner.lock().unwrap().job.clone()
     }
     pub fn shutdown(&self) {
-        if let Some(control) = self.inner.lock().unwrap().active.clone() {
-            control.cancel();
-        }
+        let controls = {
+            let inner = self.inner.lock().unwrap();
+            inner.active.iter().chain(inner.inspections.iter()).cloned().collect::<Vec<_>>()
+        };
+        for control in controls { control.cancel(); }
     }
 }
 
@@ -148,7 +179,7 @@ pub async fn configure_engines(
     source: EngineSource,
 ) -> Result<EngineReport> {
     let core = state.core.clone();
-    let operation = core.reserve()?;
+    let operation = core.inspect()?;
     tauri::async_runtime::spawn_blocking(move || {
         if matches!(source, EngineSource::Current) {
             if let Some(report) = core.inner.lock().unwrap().report.clone() {
@@ -190,7 +221,7 @@ pub async fn probe_media(
     let path = core.authorize(&input_path)?;
     engine::is_video_input(&path)?;
     let engines = core.engines()?;
-    let operation = core.reserve()?;
+    let operation = core.inspect()?;
     tauri::async_runtime::spawn_blocking(move || {
         let mut info = engine::probe(&engines, &path, &NativeRunner, &operation.control)?;
         let video_input = engine::is_video_input(&path)?;
@@ -214,7 +245,7 @@ pub async fn probe_image(
     if !crate::images::is_image_input(&path) {
         return Err("Select a supported image file.".into());
     }
-    let operation = core.reserve()?;
+    let operation = core.inspect()?;
     tauri::async_runtime::spawn_blocking(move || {
         crate::images::decode(&path, &operation.control).map(|decoded| decoded.info)
     })
@@ -234,7 +265,7 @@ pub async fn probe_pdf(
     if !crate::pdf::is_input(&path) {
         return Err("Choose a PDF file.".into());
     }
-    let operation = core.reserve()?;
+    let operation = core.inspect()?;
     tauri::async_runtime::spawn_blocking(move || crate::pdf::inspect(&path, &operation.control))
         .await
         .map_err(|_| "PDF inspection failed.")?
@@ -547,8 +578,8 @@ pub fn convert_to(
 
 #[tauri::command]
 pub fn start_conversion(
-    window: tauri::WebviewWindow,
     state: tauri::State<'_, Runtime>,
+    output_path: String,
     input_path: String,
     format: OutputFormat,
     pdf_options: Option<crate::pdf::PdfOptions>,
@@ -580,6 +611,7 @@ pub fn start_conversion(
     } else {
         Some(core.engines()?)
     };
+    let chosen = core.destination(&output_path)?;
     let operation = core.reserve()?;
     let id = core.sequence.fetch_add(1, Ordering::SeqCst) + 1;
     let job = Job {
@@ -641,34 +673,11 @@ pub fn start_conversion(
             }
             operation.control.check()?;
             core.update(id, |j| {
-                j.phase = JobPhase::ChoosingDestination;
+                j.phase = JobPhase::Validating;
                 j.duration = media.as_ref().and_then(|m| m.duration);
-                j.message = "Choose a new destination filename in the Save dialog.".into();
+                j.message = "Rechecking queued input and destination…".into();
             });
-            let stem = input.file_stem().unwrap_or_default().to_string_lossy();
             let folder_output = pdf_input && format.image();
-            let mut dialog = window
-                .dialog()
-                .file()
-                .set_parent(&window)
-                .set_title(if folder_output {
-                    "Name a NEW output folder for PDF pages"
-                } else {
-                    "Save converted file without overwriting"
-                })
-                .set_file_name(if folder_output {
-                    format!("{stem}-pages")
-                } else {
-                    format!("{stem}_converted.{}", format.extension())
-                });
-            if !folder_output {
-                dialog =
-                    dialog.add_filter(format.extension().to_uppercase(), &[format.extension()]);
-            }
-            let chosen = dialog.blocking_save_file().ok_or(CANCELLED)?;
-            let chosen = chosen
-                .into_path()
-                .map_err(|_| "Could not access that destination.".to_string())?;
             let destination = if folder_output {
                 chosen.clone()
             } else {
@@ -826,6 +835,8 @@ pub fn start_conversion(
             )
         })();
         // A terminal snapshot must imply that the native operation slot is free.
+        if let Ok(path) = &result { core.record_output(path); }
+        operation.control.cleanup();
         drop(operation);
         core.update(id, |j| match result {
             Ok(path) => {
@@ -853,8 +864,8 @@ pub fn start_conversion(
 
 #[tauri::command]
 pub fn start_images_pdf(
-    window: tauri::WebviewWindow,
     state: tauri::State<'_, Runtime>,
+    output_path: String,
     input_paths: Vec<String>,
     page_size: crate::pdf::ImagePageSize,
 ) -> Result<Job> {
@@ -876,12 +887,13 @@ pub fn start_images_pdf(
             Ok(path)
         })
         .collect::<Result<Vec<_>>>()?;
+    let chosen = core.destination(&output_path)?;
     let operation = core.reserve()?;
     let id = core.sequence.fetch_add(1, Ordering::SeqCst) + 1;
     let job = Job {
         id,
         revision: 0,
-        phase: JobPhase::ChoosingDestination,
+        phase: JobPhase::Validating,
         input_path: format!("{} images (visible list order)", inputs.len()),
         destination: None,
         format: OutputFormat::Pdf,
@@ -890,23 +902,12 @@ pub fn start_images_pdf(
         percent: None,
         pages_done: Some(0),
         pages_total: Some(inputs.len() as u16),
-        message: "Choose a new PDF filename in the Save dialog.".into(),
+        message: "Rechecking queued inputs and destination…".into(),
     };
     core.inner.lock().unwrap().job = Some(job.clone());
     std::thread::spawn(move || {
         let result = (|| {
             operation.control.check()?;
-            let chosen = window
-                .dialog()
-                .file()
-                .set_parent(&window)
-                .set_title("Save images as one PDF without overwriting")
-                .set_file_name("images.pdf")
-                .add_filter("PDF", &["pdf"])
-                .blocking_save_file()
-                .ok_or(CANCELLED)?
-                .into_path()
-                .map_err(|_| "Could not access that destination.")?;
             let destination = destination_path(&inputs[0], &chosen, OutputFormat::Pdf)?;
             core.update(id, |j| {
                 j.phase = JobPhase::Running;
@@ -932,6 +933,8 @@ pub fn start_images_pdf(
                 },
             )
         })();
+        if let Ok(path) = &result { core.record_output(path); }
+        operation.control.cleanup();
         drop(operation);
         core.update(id, |j| match result {
             Ok(path) => {
@@ -954,8 +957,8 @@ pub fn start_images_pdf(
 }
 #[tauri::command]
 pub fn start_merge_pdf(
-    window: tauri::WebviewWindow,
     state: tauri::State<'_, Runtime>,
+    output_path: String,
     input_paths: Vec<String>,
 ) -> Result<Job> {
     state.previews.cancel_all();
@@ -975,12 +978,13 @@ pub fn start_merge_pdf(
             Ok(path)
         })
         .collect::<Result<Vec<_>>>()?;
+    let chosen = core.destination(&output_path)?;
     let operation = core.reserve()?;
     let id = core.sequence.fetch_add(1, Ordering::SeqCst) + 1;
     let job = Job {
         id,
         revision: 0,
-        phase: JobPhase::ChoosingDestination,
+        phase: JobPhase::Validating,
         input_path: format!("{} PDFs (visible list order)", inputs.len()),
         destination: None,
         format: OutputFormat::Pdf,
@@ -989,23 +993,12 @@ pub fn start_merge_pdf(
         percent: None,
         pages_done: Some(0),
         pages_total: None,
-        message: "Choose a new PDF filename in the Save dialog.".into(),
+        message: "Rechecking queued inputs and destination…".into(),
     };
     core.inner.lock().unwrap().job = Some(job.clone());
     std::thread::spawn(move || {
         let result = (|| {
             operation.control.check()?;
-            let chosen = window
-                .dialog()
-                .file()
-                .set_parent(&window)
-                .set_title("Save merged PDF without overwriting")
-                .set_file_name("merged.pdf")
-                .add_filter("PDF", &["pdf"])
-                .blocking_save_file()
-                .ok_or(CANCELLED)?
-                .into_path()
-                .map_err(|_| "Could not access that destination.")?;
             let destination = destination_path(&inputs[0], &chosen, OutputFormat::Pdf)?;
             core.update(id, |j| {
                 j.destination = Some(destination.to_string_lossy().into_owned());
@@ -1039,6 +1032,8 @@ pub fn start_merge_pdf(
                 }),
             )
         })();
+        if let Ok(path) = &result { core.record_output(path); }
+        operation.control.cleanup();
         drop(operation);
         core.update(id, |j| match result {
             Ok(path) => {
@@ -1090,3 +1085,26 @@ pub fn cancel_conversion(state: tauri::State<'_, Runtime>, id: u64) -> Result<()
 
 #[cfg(test)]
 mod tests;
+
+/// Save-dialog authorization is separate from execution; paths never grant arbitrary file access.
+#[tauri::command]
+pub async fn choose_queue_destination(
+    window: tauri::WebviewWindow, state: tauri::State<'_, Runtime>,
+    suggested: String, format: OutputFormat, folder_output: bool,
+) -> Result<Option<String>> {
+    let core = state.core.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut dialog = window.dialog().file().set_parent(&window)
+            .set_title(if folder_output { "Name a NEW output folder" } else { "Save output without overwriting" })
+            .set_file_name(suggested);
+        if !folder_output { dialog = dialog.add_filter(format.extension().to_uppercase(), &[format.extension()]); }
+        let Some(chosen) = dialog.blocking_save_file() else { return Ok(None); };
+        let mut path = chosen.into_path().map_err(|_| "Could not access that destination.")?;
+        if !folder_output { path.set_extension(format.extension()); }
+        if path.exists() || !path.parent().is_some_and(|p| p.is_dir()) {
+            return Err("Choose a new destination in an accessible folder. Existing outputs are protected.".into());
+        }
+        core.inner.lock().unwrap().destinations.insert(path.clone());
+        Ok(Some(path.to_string_lossy().into_owned()))
+    }).await.map_err(|_| "Could not choose a destination.".to_string())?
+}

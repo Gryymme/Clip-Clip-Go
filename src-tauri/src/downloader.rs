@@ -23,6 +23,7 @@ use protocol::{
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::{
+    collections::HashMap,
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicU64, Ordering},
@@ -103,12 +104,16 @@ impl MediaInput {
         Ok((self.url().to_owned(), None))
     }
 }
+#[derive(Clone)]
+struct Prepared { inspected: Inspected, settings: Settings, name: String, folder: PathBuf }
 #[derive(Default)]
 struct Inner {
     job: Option<Job>,
     inspected: Option<Inspected>,
     control: Option<Arc<Control>>,
     folder: Option<PathBuf>,
+    prepared: HashMap<u64, Prepared>,
+    executions: HashMap<u64, Runtime>,
 }
 #[derive(Default, Clone)]
 pub struct Runtime {
@@ -116,6 +121,14 @@ pub struct Runtime {
     sequence: Arc<AtomicU64>,
 }
 impl Runtime {
+    fn prepare_snapshot(&self, inspected: Inspected, settings: Settings, name: String) -> Result<Value> {
+    let mut inner = self.inner.lock().unwrap();
+    let folder = inner.folder.clone().ok_or("Choose a destination folder first.")?;
+    let destination = folder.join(format!("{}.{}", filename(&name), settings.format));
+    let ticket = self.sequence.fetch_add(1, Ordering::SeqCst) + 1;
+    inner.prepared.insert(ticket, Prepared { inspected, settings, name, folder });
+    Ok(json!({"ticket":ticket,"destination":destination.to_string_lossy()}))
+    }
     fn point(&self, id: u64, stage: &str, p: DownloadProgress) {
         self.update(id, |j| {
             if let Some(diagnostic) = p.diagnostic {
@@ -332,7 +345,7 @@ pub fn inspect_browser_download(
     Ok(job)
 }
 fn inspect_input(state: &Runtime, shared: &conversion::Runtime, input: MediaInput) -> Result<Job> {
-    let operation = shared.core.reserve()?;
+    let operation = shared.core.inspect()?;
     shared.previews.cancel_all();
     let engines = shared.core.engines()?;
     let runtime = state.clone();
@@ -343,6 +356,7 @@ fn inspect_input(state: &Runtime, shared: &conversion::Runtime, input: MediaInpu
     }
     {
         let mut i = runtime.inner.lock().unwrap();
+        if i.control.is_some() { return Err("A link inspection is already active. Finish or cancel it first.".into()); }
         i.job = Some(job.clone());
         i.inspected = None;
         i.control = Some(operation.control.clone());
@@ -401,7 +415,16 @@ fn inspect_input(state: &Runtime, shared: &conversion::Runtime, input: MediaInpu
     Ok(job)
 }
 #[tauri::command]
-pub fn download_status(state: tauri::State<'_, Runtime>) -> Option<Job> {
+pub fn download_status(state: tauri::State<'_, Runtime>, id: Option<u64>) -> Option<Job> {
+    if let Some(id) = id {
+        let runtime = state.inner.lock().unwrap().executions.get(&id).cloned()?;
+        let job = runtime.inner.lock().unwrap().job.clone();
+        // finish clears its control after the process lease/resources have settled.
+        if runtime.inner.lock().unwrap().control.is_none() {
+            state.inner.lock().unwrap().executions.remove(&id);
+        }
+        return job;
+    }
     let mut inner = state.inner.lock().unwrap();
     if inner.control.is_none() {
         if inner.inspected.as_ref().is_some_and(|s|matches!(&s.input,MediaInput::Browser(c) if c.expires_at<=crate::companion::shared::now())){inner.inspected=None;}
@@ -420,6 +443,8 @@ pub fn download_status(state: tauri::State<'_, Runtime>) -> Option<Job> {
 }
 #[tauri::command]
 pub fn cancel_download(state: tauri::State<'_, Runtime>, id: u64) -> Result<()> {
+    let execution = state.inner.lock().unwrap().executions.get(&id).cloned();
+    if let Some(runtime) = execution { runtime.shutdown(); return Ok(()); }
     let control = {
         let i = state.inner.lock().unwrap();
         if i.job.as_ref().is_none_or(|j| j.id != id) {
@@ -457,7 +482,7 @@ pub async fn choose_download_folder(
     state: tauri::State<'_, Runtime>,
     shared: tauri::State<'_, conversion::Runtime>,
 ) -> Result<Option<String>> {
-    let operation = shared.core.reserve()?;
+    let operation = shared.core.inspect()?;
     let runtime = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let _operation = operation;
@@ -959,39 +984,44 @@ fn execute(
     publish(&output, &destination, control)
 }
 #[tauri::command]
-pub fn start_download(
-    state: tauri::State<'_, Runtime>,
-    shared: tauri::State<'_, conversion::Runtime>,
-    inspection_id: u64,
-    settings: Settings,
-    name: String,
-) -> Result<Job> {
+pub fn prepare_download(
+    state: tauri::State<'_, Runtime>, shared: tauri::State<'_, conversion::Runtime>,
+    inspection_id: u64, settings: Settings, name: String,
+) -> Result<Value> {
     if name.trim().is_empty() || name.chars().count() > 100 {
         return Err("Enter an output filename of 1–100 characters without its extension.".into());
     }
+    let inspected = state.inspected(inspection_id)?;
+    plan::build(&inspected.media, &settings, &shared.core.engines()?)?;
+    state.prepare_snapshot(inspected, settings, name)
+}
+#[tauri::command]
+pub fn discard_download(state: tauri::State<'_, Runtime>, ticket: u64) {
+    state.inner.lock().unwrap().prepared.remove(&ticket);
+}
+#[tauri::command]
+pub fn start_download(
+    state: tauri::State<'_, Runtime>, shared: tauri::State<'_, conversion::Runtime>, ticket: u64,
+) -> Result<Job> {
     let operation = shared.core.reserve()?;
     shared.previews.cancel_all();
+    let Prepared { inspected, settings, name, folder } = state.inner.lock().unwrap().prepared.remove(&ticket)
+        .ok_or("This queued media is no longer available. Inspect and submit it again.")?;
+    if !folder.is_dir() { return Err("The queued destination folder is inaccessible.".into()); }
+    if let MediaInput::Browser(c) = &inspected.input { c.validate(crate::companion::shared::now())?; }
     let engines = shared.core.engines()?;
-    let inspected = state.inspected(inspection_id)?;
     let plan = plan::build(&inspected.media, &settings, &engines)?;
-    let runtime = state.inner().clone();
-    let folder = runtime
-        .inner
-        .lock()
-        .unwrap()
-        .folder
-        .clone()
-        .ok_or("Choose a destination folder first.")?;
+    // Output execution has its own status slot; inspecting another link cannot replace it.
+    let runtime = Runtime { sequence: state.sequence.clone(), ..Runtime::default() };
     let id = runtime.sequence.fetch_add(1, Ordering::SeqCst) + 1;
-    let mut job = Job::new(id, "downloading", "Preparing the selected source streams…");
-    if let MediaInput::Browser(c) = &inspected.input {
-        job.browser_source = Some(c.clone());
-    }
+    let job = Job::new(id, "downloading", "Preparing the selected source streams…");
     {
         let mut i = runtime.inner.lock().unwrap();
         i.job = Some(job.clone());
         i.control = Some(operation.control.clone());
     }
+    state.inner.lock().unwrap().executions.insert(id, runtime.clone());
+    let output_core = shared.core.clone();
     std::thread::spawn(move || {
         let r = runtime.clone();
         let notify = Arc::new(
@@ -1019,6 +1049,7 @@ pub fn start_download(
                 )
             })
             .map(Some);
+        if let Ok(Some(path)) = &result { output_core.record_output(path); }
         operation.control.cleanup();
         drop(operation);
         runtime.finish(id, result);

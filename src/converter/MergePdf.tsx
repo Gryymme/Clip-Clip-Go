@@ -1,3 +1,4 @@
+import {displayPathText} from '../pathDisplay';
 import {useRef} from 'react';
 import {DropSelection,EmptySelectionCard} from './SelectionCard';
 import {FileCard,readableSize} from './FileSummary';
@@ -24,7 +25,7 @@ export default function MergePdf({conversion:c,selecting}:{conversion:Conversion
             <button type="button" className="button button-quiet" disabled={locked || index===c.mergeFiles.length-1} onClick={()=>c.moveMergeFile(index,1)}>Move down</button>
             <button type="button" id={`pdf-remove-${index}`} className="button button-quiet button-destructive" disabled={locked} onClick={()=>remove(index)}>Remove</button>
           </div>} />
-          {file.issue && <p className="selection-error" role="alert" dir="auto">{file.name}: {file.issue} Remove this file or choose a supported copy.</p>}
+          {file.issue && <p className="selection-error" role="alert" dir="auto">{file.name}: {displayPathText(file.issue)} Remove this file or choose a supported copy.</p>}
         </li>)}
       </ol>
       <p className="field-help" role="status">{c.mergeFiles.length<2?'Choose at least two valid PDFs to merge.':`${c.mergePages.toLocaleString()} pages in file order. Invalid files must be removed before merging.`}</p>
@@ -35,10 +36,10 @@ export default function MergePdf({conversion:c,selecting}:{conversion:Conversion
       <p className="field-help">Original page sizes, orientation and content are retained without rasterization.</p>
       <details className="supported-inputs field-help"><summary>PDF requirements and limitations</summary><p>Encrypted, password-protected, unreadable and unsupported PDFs cannot be merged. Page annotations and direct web links may carry over. Internal page-link destinations are not retained. Named links, forms, bookmarks, attachments, layers, accessibility tags and digital signatures are not guaranteed. Check important documents after merging. PDF actions are never executed and remote resources are never fetched during processing.</p></details>
     </section>
-    {c.error && <p className="selection-error" role="alert">{c.error}</p>}
+    {c.error && <p className="selection-error" role="alert">{displayPathText(c.error)}</p>}
     <section className="destination-section workflow-section" aria-labelledby="merge-destination-heading">
       <h2 id="merge-destination-heading">Destination</h2>
-      <div className="destination-row"><p className="field-help" id="merge-destination-help">{c.busy?'A download or conversion is active. Finish or cancel it before starting another.':'Choose a new filename in the Save dialog. Originals and existing files are protected.'}</p><button type="button" className="button button-primary" aria-describedby="merge-destination-help" disabled={!c.canMerge} onClick={()=>void c.startMerge()}>{c.starting?'Preparing…':'Merge PDF'}</button></div>
+      <div className="destination-row"><p className="field-help" id="merge-destination-help">{c.queueBusy?'Choose a destination to add this configured task to the queue.':'Choose a new filename in the Save dialog. Originals and existing files are protected.'}</p><button type="button" className="button button-primary" aria-describedby="merge-destination-help" disabled={!c.canMerge} onClick={()=>void c.startMerge()}>{c.starting?'Preparing…':c.queueBusy?'Add to queue':'Merge PDF'}</button></div>
     </section>
     <JobStatus controller={c} />
   </div>;

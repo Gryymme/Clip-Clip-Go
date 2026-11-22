@@ -1,4 +1,35 @@
 use super::*;
+
+#[test]
+fn session_queue_download_snapshot_survives_later_inspection_and_folder_changes() {
+    let work = dir();
+    let runtime = Runtime::default();
+    runtime.inner.lock().unwrap().folder = Some(work.path().to_owned());
+    let inspected = Inspected { id:1, input:MediaInput::Page("https://media.example.test/item?signature=private".into()), media:metadata() };
+    let original = settings();
+    let prepared = runtime.prepare_snapshot(inspected.clone(), original.clone(), "first".into()).unwrap();
+    let ticket = prepared["ticket"].as_u64().unwrap();
+    assert!(!prepared.to_string().contains("signature"));
+    assert!(!prepared.to_string().contains("private"));
+    {
+        let mut inner = runtime.inner.lock().unwrap();
+        inner.folder = Some(work.path().join("later"));
+        inner.inspected = Some(Inspected { id:2, input:MediaInput::Page("https://media.example.test/other".into()), media:metadata() });
+        inner.job = Some(Job::new(2, "ready", "new inspection"));
+    }
+    let saved = runtime.inner.lock().unwrap().prepared.remove(&ticket).unwrap();
+    assert_eq!(saved.inspected.id, 1);
+    assert_eq!(saved.inspected.input.url(), inspected.input.url());
+    assert_eq!(saved.folder, work.path());
+    assert_eq!(saved.name, "first");
+    assert_eq!(saved.settings.video_source, original.video_source);
+    assert!(runtime.inner.lock().unwrap().prepared.remove(&ticket).is_none());
+    let execution = Runtime::default();
+    execution.inner.lock().unwrap().job = Some(Job::new(3, "downloading", "output"));
+    runtime.inner.lock().unwrap().executions.insert(3, execution.clone());
+    runtime.stage(2, "inspecting", "another inspection");
+    assert_eq!(execution.inner.lock().unwrap().job.as_ref().unwrap().message, "output");
+}
 mod browser;
 mod pipeline;
 use std::{

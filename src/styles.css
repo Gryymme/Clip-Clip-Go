@@ -290,3 +290,18 @@ progress:indeterminate::-webkit-progress-value { background: transparent; }
 .companion-folder { padding: var(--space-3); background: var(--color-surface); border-radius: var(--radius-control); overflow-wrap: anywhere; }
 .companion-dialog input { inline-size: 100%; min-inline-size: 0; }
 .companion-dialog button { max-inline-size: 100%; white-space: normal; overflow-wrap: anywhere; }
+.session-queue, .queue-card, .queue-card-heading > div { min-inline-size: 0; }
+.queue-list { display: grid; gap: var(--space-4); list-style: none; padding: 0; margin-block: var(--space-5); }
+.queue-card { padding: var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-surface); background: var(--color-surface); }
+.queue-card-heading { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: var(--space-3); }
+.queue-card h3 { margin-block: var(--space-2); font-size: var(--text-body); font-weight: var(--weight-medium); }
+.queue-card h3, .queue-source, .queue-destination, .queue-notice, .queue-card .job-message { overflow-wrap: anywhere; white-space: pre-wrap; }
+.queue-source { max-block-size: 12rem; overflow: auto; }
+.queue-state { flex-shrink: 0; white-space: nowrap; font-size: var(--text-small); color: var(--color-secondary); }
+.queue-state[data-status="failed"] { color: var(--color-error); }
+.queue-actions, .queue-pagination { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-block-start: var(--space-4); }
+
+.queue-card { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: var(--space-4); align-items: start; }
+.queue-card-content { min-inline-size: 0; }
+.queue-card > .file-preview { flex-shrink: 0; }
+@media (max-width: 480px) { .queue-card { grid-template-columns: minmax(0, 1fr); } }
