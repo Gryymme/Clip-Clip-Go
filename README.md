@@ -2,7 +2,31 @@
 
 Clip-Clip-Go is a Windows desktop application combining single-link media downloading with local media, image and text/PDF conversion. Visible branding is **ClipClipGO**. A shared session Queue manages output jobs; persistent History remains a placeholder.
 
+## Visual showcase
+
+Local conversion and the light theme in ClipClipGO. Expand the screenshots in each feature section for more views.
+
+![Converter with a selected file and output options](<demo-images/converter-page-file-populated.png>)
+
+![ClipClipGO in light mode](<demo-images/light-mode-screenshot.png>)
+
 ## Downloader
+
+<details>
+<summary>Downloader and browser companion screenshots</summary>
+
+![Downloader before inspecting a media link](<demo-images/downloader-page-empty.png>)
+
+![Downloader with inspected media and output options](<demo-images/downloader-page-media-link-populated.png>)
+
+![Downloader with media received from the browser companion](<demo-images/downloader-page-broswer-companion-populated.png>)
+
+![Browser companion popup before media discovery](<demo-images/extension-popup-window-empty.png>)
+
+![Browser companion popup with discovered media](<demo-images/extension-popup-window-populated.png>)
+
+</details>
+
 
 The optional **ClipClipGO browser companion** adds user-activated Chrome media discovery and Native Messaging handoff. Select a detected HTTP file/HLS/DASH source; the app inspects that media URL directly and reuses the source/output workflow. Download still requires confirmation in ClipClipGO. Website access is optional and origin-scoped; some frames/CDNs need separate grants. No cookies, Authorization headers, browser cache or credentials are imported. Detection does not guarantee download or universal site support.
 
@@ -38,15 +62,33 @@ See [Downloader implementation, correction evidence and manual checklist](docs/d
 
 ## Shared session Queue
 
+![Session Queue populated with application jobs](<demo-images/queue-page-populated.png>)
+
 Converter, Images to PDF, Merge PDF and Downloader submit to one in-memory scheduler. When idle, submission starts normally; while busy, **Add to queue** accepts another configured task. Conversion Save dialogs run before submission, so waiting tasks already have destinations. Input order, options, inspected download source and destination are captured at submission. Metadata inspection, thumbnails and previews are not output jobs. Receiving browser media still only inspects it; downloading requires explicit submission after configuration.
 
-One output job runs globally through transfer, merge/conversion, validation, protected publication and cleanup. Inputs and destinations are checked again at execution. Competing destinations fail safely rather than overwrite; failures and cancellation release the slot after cleanup. Duplicate unfinished submissions with identical inputs/settings/destination are coalesced. Queue shows actual stage progress (or an indeterminate bar), waiting/running/cancelling/completed/failed/cancelled states, keyboard-accessible waiting reorder controls, cancellation, removal and Clear finished. Results remain until cleared; long sessions use 40-entry pages. Completed outputs/folders can be opened through an action restricted to outputs published during this session.
+One output job runs globally through transfer, merge/conversion, validation, protected publication and cleanup. Inputs and destinations are checked again at execution. Competing destinations fail safely rather than overwrite; failures and cancellation release the slot after cleanup. Duplicate unfinished submissions with identical inputs/settings/destination are coalesced. Queue shows actual stage progress (or an indeterminate bar), waiting/running/cancelling/completed/failed/cancelled states, keyboard-accessible waiting reorder controls, cancellation, removal and Clear finished. Finished-job results and errors appear in Queue rather than feature-page result panels. Results remain until cleared; long sessions use 40-entry pages. Completed outputs/folders can be opened through an action restricted to outputs published during this session.
 
 Navigation does not stop processing. Closing requests a fresh scheduler count and confirms discarded waiting work/interrupted processing, then blocks new output starts, cancels owned work and waits for worker leases before exiting. Waiting work and session results are **not resumed after restarting**, and nothing continues in the background after exit. Queue data, signed media URLs and request context are not persisted. Queued media can expire or become inaccessible; inspect and submit it again if needed. No pause/resume, automatic queue retries, timed scheduling, persistent history or concurrency setting is implemented. Forced termination/power loss retains the existing possibility of orphaned staging files.
 
 Focused checks: `node --experimental-strip-types --test tests/queue.test.mjs tests/queue-runner.test.mjs`, `node scripts/check-queue-layout.mjs`, and `cargo test --manifest-path src-tauri/Cargo.toml --bin clip-clip-go --offline session_queue`. Layout checks use isolated SSR fixtures/CSS inference, not desktop verification.
 
 ## Implemented conversions
+
+<details>
+<summary>Converter, Images to PDF and Merge PDF screenshots</summary>
+
+![Converter before choosing a source file](<demo-images/converter-page-empty.png>)
+
+![Images to PDF before adding image pages](<demo-images/imagestopdf-page-empty.png>)
+
+![Images to PDF with selected image pages](<demo-images/imagestopdf-page-populated.png>)
+
+![Merge PDF before adding source PDFs](<demo-images/mergepdf-page-empty.png>)
+
+![Merge PDF with selected PDF files](<demo-images/mergepdf-page-populated.png>)
+
+</details>
+
 
 | Input | Outputs |
 | --- | --- |

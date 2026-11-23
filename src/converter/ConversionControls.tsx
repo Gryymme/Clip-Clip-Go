@@ -11,19 +11,19 @@ export function EngineSetup({ controller: c, selecting }: { controller: Conversi
   return <details className="supported-inputs field-help engine-details"><summary>Audio/video engine details</summary><p className="engine-version">{c.engine.ffmpegVersion}</p><p className="engine-version">{c.engine.ffprobeVersion}</p></details>;
 }
 export function JobStatus({ controller: c }: { controller: ConversionController }) {
-  if (!c.job) return c.lastEntry ? <QueueNotice entry={c.lastEntry} /> : null;
-  const job = c.job, active = jobIsBusy(job);
+  if (!c.job || !jobIsBusy(c.job)) return c.lastEntry ? <QueueNotice entry={c.lastEntry} /> : null;
+  const job = c.job;
   const pageOrStillJob = isImageFormat(job.format) || isTextFormat(job.format) || job.format === 'pdf' || Boolean(job.pagesTotal);
   return <section className="conversion-job workflow-section" aria-labelledby="job-heading">
     {c.lastEntry && <QueueNotice entry={c.lastEntry} />}
-    <h2 id="job-heading">{active ? 'Conversion status' : 'Last conversion'}</h2>
-    <p className="job-message" data-phase={job.phase} role={job.phase === 'failed' ? 'alert' : 'status'}>{displayPathText(job.message)}</p>
-    {(active || job.phase === 'succeeded') && <>
-      <progress aria-label="Conversion progress" max={100} value={job.phase === 'succeeded' ? 100 : job.phase === 'running' ? job.percent ?? undefined : undefined} />
+    <h2 id="job-heading">Conversion status</h2>
+    <p className="job-message" data-phase={job.phase} role="status">{displayPathText(job.message)}</p>
+    <>
+      <progress aria-label="Conversion progress" max={100} value={job.phase === 'running' ? job.percent ?? undefined : undefined} />
       {job.pagesTotal != null ? <p className="field-help numeric-value">{job.pagesDone ?? 0} of {job.pagesTotal} pages processed</p> : !pageOrStillJob && job.phase === 'running' && <p className="field-help numeric-value">{job.format==='gif' && job.percent===null ? 'Progress is indeterminate for this stage.' : <>{job.percent === null ? 'Duration unavailable · ' : `${Math.floor(job.percent)}% · `}{displayDuration(job.seconds)} processed</>}</p>}
-    </>}
-    <details className="file-location job-paths"><summary>{job.phase === 'succeeded' ? 'Saved output details' : 'Job file details'}</summary><dl><div><dt>Input</dt><dd dir="auto">{displayPathText(job.inputPath)}</dd></div>{job.destination && <div><dt>Destination</dt><dd dir="auto">{displayPath(job.destination)}</dd></div>}</dl></details>
-    {active && <button className="button button-secondary" type="button" disabled={c.cancelling || job.phase === 'cancelling'} onClick={() => void c.cancel()}>{c.cancelling || job.phase === 'cancelling' ? 'Cancelling…' : 'Cancel conversion'}</button>}
+    </>
+    <details className="file-location job-paths"><summary>Job file details</summary><dl><div><dt>Input</dt><dd dir="auto">{displayPathText(job.inputPath)}</dd></div>{job.destination && <div><dt>Destination</dt><dd dir="auto">{displayPath(job.destination)}</dd></div>}</dl></details>
+    <button className="button button-secondary" type="button" disabled={c.cancelling || job.phase === 'cancelling'} onClick={() => void c.cancel()}>{c.cancelling || job.phase === 'cancelling' ? 'Cancelling…' : 'Cancel conversion'}</button>
   </section>;
 }
 export function ConversionActions({ controller: c, file, imagesMode = false }: { controller: ConversionController; file: SelectedFile | null; imagesMode?: boolean }) {

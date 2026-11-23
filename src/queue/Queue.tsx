@@ -15,7 +15,8 @@ function JobThumbnail({entry}:{entry:QueueEntry}) {
 }
 const labels: Record<Status, string> = {waiting:'Waiting', running:'Running', cancelling:'Cancelling', completed:'Completed', failed:'Failed', cancelled:'Cancelled'};
 export function QueueNotice({entry}:{entry:Entry}) {
-  return <p className="field-help queue-notice" role="status">{entry.type} · {entry.title} · {labels[entry.status]}. {entry.status === 'waiting' ? 'Added to Queue. You can keep configuring tasks.' : entry.status === 'failed' ? displayPathText(entry.error ?? '') : 'See Queue for session results and actions.'}</p>;
+  if (finished(entry.status)) return null;
+  return <p className="field-help queue-notice" role="status">{entry.type} · {entry.title} · {labels[entry.status]}. {entry.status === 'waiting' ? 'Added to Queue. You can keep configuring tasks.' : 'See Queue for session results and actions.'}</p>;
 }
 export interface QueueViewProps {
   entries: readonly Entry[];
@@ -43,6 +44,7 @@ export function QueueView({entries, cancel, move, remove, clear, open, actionErr
           <details className="file-location"><summary>Source details</summary><p className="queue-source" dir="auto" role="region" aria-label="Source paths" tabIndex={0}>{displayPathText(entry.source) || 'Source details unavailable'}</p></details>
           <p className="field-help queue-destination" dir="auto">Destination: {displayPath(entry.destination)}</p>
           <p className="job-message" data-phase={entry.status} role={entry.status === 'failed' ? 'alert' : undefined}>{displayPathText(entry.error || entry.stage)}</p>
+          {Boolean(download?.diagnostics?.length) && <details className="download-diagnostics field-help"><summary>Technical diagnostics</summary><ol>{download!.diagnostics!.map((d,i)=><li key={i}><p>{d.stage} · {d.engine} · {d.exitCode===null?'no exit status':'exit '+d.exitCode}{d.selectedIds.length?' · formats '+d.selectedIds.join(', '):''}</p>{d.detail&&<pre>{displayPathText(d.detail)}</pre>}</li>)}</ol></details>}
           {entry.status === 'waiting' && <p className="field-help numeric-value">Waiting position {(index + 1).toLocaleString()} of {waiting.length.toLocaleString()}</p>}
           {active && <><progress max={100} value={percent} aria-label={`${entry.title} progress`} aria-valuetext={percent === undefined ? 'Progress unavailable for this stage' : `${download?.progressKind === 'estimated' ? 'About ' : ''}${Math.floor(percent)} percent of ${progressUnit}`}/>{percent !== undefined && <p className="field-help numeric-value">{download?.progressKind === 'estimated' ? 'About ' : ''}{Math.floor(percent)}% of {progressUnit}</p>}{measured && <p className="field-help numeric-value">{measured}</p>}</>}
           <div className="queue-actions" role="group" aria-label={`Actions for ${entry.title}`}>

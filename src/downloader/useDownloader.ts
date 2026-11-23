@@ -53,6 +53,6 @@ export function useDownloader(engineReady:boolean){
   if(active(job)){try{await invoke('cancel_download',{id:job!.id});}catch(cause){setError(nativeError(cause));}}
   else if(outputEntry)queue.cancel(outputEntry.id);
  }
- return {browserSource:job?.browserSource,queueBusy,lastEntry,url,setUrl,job:visibleJob,inspection,settings,change,capabilities,error,pending,busy,otherBusy,folder,name,setName,plan:visiblePlan,planning,planError:localError??planError,inspect,inspectBrowser,chooseFolder,start,cancel};
+ return {inspectionError:job?.stage==='failed'?job.message:null,browserSource:job?.browserSource,queueBusy,lastEntry,url,setUrl,job:visibleJob,inspection,settings,change,capabilities,error,pending,busy,otherBusy,folder,name,setName,plan:visiblePlan,planning,planError:localError??planError,inspect,inspectBrowser,chooseFolder,start,cancel};
 }
 export type DownloaderController=ReturnType<typeof useDownloader>;
