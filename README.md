@@ -4,7 +4,7 @@ Clip-Clip-Go is a Windows desktop application combining single-link media downlo
 
 ## Visual showcase
 
-Local conversion and the light theme in ClipClipGO. Expand the screenshots in each feature section for more views.
+Local conversion and the light theme in ClipClipGO. See the screenshots in each feature section for more views.
 
 ![Converter with a selected file and output options](<demo-images/converter-page-file-populated.png>)
 
@@ -12,8 +12,7 @@ Local conversion and the light theme in ClipClipGO. Expand the screenshots in ea
 
 ## Downloader
 
-<details>
-<summary>Downloader and browser companion screenshots</summary>
+### Downloader and browser companion screenshots
 
 ![Downloader before inspecting a media link](<demo-images/downloader-page-empty.png>)
 
@@ -25,7 +24,7 @@ Local conversion and the light theme in ClipClipGO. Expand the screenshots in ea
 
 ![Browser companion popup with discovered media](<demo-images/extension-popup-window-populated.png>)
 
-</details>
+
 
 
 The optional **ClipClipGO browser companion** adds user-activated Chrome media discovery and Native Messaging handoff. Select a detected HTTP file/HLS/DASH source; the app inspects that media URL directly and reuses the source/output workflow. Download still requires confirmation in ClipClipGO. Website access is optional and origin-scoped; some frames/CDNs need separate grants. No cookies, Authorization headers, browser cache or credentials are imported. Detection does not guarantee download or universal site support.
@@ -74,8 +73,7 @@ Focused checks: `node --experimental-strip-types --test tests/queue.test.mjs tes
 
 ## Implemented conversions
 
-<details>
-<summary>Converter, Images to PDF and Merge PDF screenshots</summary>
+### Converter, Images to PDF and Merge PDF screenshots
 
 ![Converter before choosing a source file](<demo-images/converter-page-empty.png>)
 
@@ -87,7 +85,7 @@ Focused checks: `node --experimental-strip-types --test tests/queue.test.mjs tes
 
 ![Merge PDF with selected PDF files](<demo-images/mergepdf-page-populated.png>)
 
-</details>
+
 
 
 | Input | Outputs |
