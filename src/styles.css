@@ -305,3 +305,7 @@ progress:indeterminate::-webkit-progress-value { background: transparent; }
 .queue-card-content { min-inline-size: 0; }
 .queue-card > .file-preview { flex-shrink: 0; }
 @media (max-width: 480px) { .queue-card { grid-template-columns: minmax(0, 1fr); } }
+
+.history-filters {display:flex;flex-wrap:wrap;gap:var(--space-3);margin-block-end:var(--space-5);}
+.history-filters label {min-inline-size:0;flex:1 1 10rem;font-size:var(--text-small);}
+.history-filters input,.history-filters select {inline-size:100%;margin-block-start:var(--space-2);}

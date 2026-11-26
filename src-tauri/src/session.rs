@@ -8,6 +8,7 @@ pub struct Session {
     confirming: AtomicBool,
     frontend_ready: AtomicBool,
     pub closing: AtomicBool,
+    history_flushed: AtomicBool,
 }
 #[tauri::command]
 pub fn queue_counts(state: tauri::State<'_, Session>, waiting: u32, running: u32) {
@@ -55,16 +56,26 @@ fn exit_after_cleanup(app: tauri::AppHandle) {
         app.state::<crate::companion::Runtime>().stop();
         // Cancellation may be cooperative for native image/PDF operations. Wait for their lease.
         while !core.settled() { std::thread::sleep(std::time::Duration::from_millis(40)); }
+        if app.state::<Session>().frontend_ready.load(Ordering::SeqCst) {
+            let _=app.emit("history-flush-requested", ());
+            let deadline=std::time::Instant::now()+std::time::Duration::from_secs(10);
+            while !app.state::<Session>().history_flushed.load(Ordering::SeqCst) && std::time::Instant::now()<deadline {std::thread::sleep(std::time::Duration::from_millis(40));}
+        }
         app.exit(0);
     });
 }
 
 #[tauri::command]
 pub fn open_queue_output(state: tauri::State<'_, crate::conversion::Runtime>, path: String, folder: bool) -> Result<(), String> {
-    use std::{os::windows::ffi::OsStrExt, path::Path, ptr::{null, null_mut}};
-    use windows_sys::Win32::UI::{Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOWNORMAL};
+    use std::path::Path;
     let output = Path::new(&path);
     if !state.core.owned_output(output) { return Err("Only outputs published in this session can be opened.".into()); }
+    open_target(output, folder)
+}
+pub(crate) fn open_saved_path(output: &std::path::Path, folder: bool) -> Result<(), String> { open_target(output, folder) }
+fn open_target(output: &std::path::Path, folder: bool) -> Result<(), String> {
+    use std::{os::windows::ffi::OsStrExt, ptr::{null, null_mut}};
+    use windows_sys::Win32::UI::{Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOWNORMAL};
     if !output.exists() { return Err("The saved output has been moved, removed or is inaccessible.".into()); }
     let target = if folder && output.is_file() { output.parent().ok_or("Output folder is unavailable.")? } else { output };
     let canonical = target.canonicalize().map_err(|_| "The saved output is inaccessible.")?;
@@ -79,3 +90,6 @@ pub fn open_queue_output(state: tauri::State<'_, crate::conversion::Runtime>, pa
     if result as isize <= 32 { return Err("Windows could not open the saved output. Use its destination path.".into()); }
     Ok(())
 }
+
+#[tauri::command]
+pub fn history_flush_done(state:tauri::State<'_,Session>){state.history_flushed.store(true,Ordering::SeqCst);}

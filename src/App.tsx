@@ -1,3 +1,4 @@
+import History from './history/History';
 import { useEffect, useReducer, useRef, useState } from 'react';
 import {active as downloadActive} from './downloader/model';
 import Queue from './queue/Queue';
@@ -33,6 +34,7 @@ export default function App() {
       : activePage === 'Images to PDF' ? <ImagesToPdf conversion={conversion} selecting={selection.selecting} />
       : activePage === 'Merge PDF' ? <MergePdf conversion={conversion} selecting={selection.selecting} />
       : activePage === 'Queue' ? <Queue />
+      : activePage === 'History' ? <History />
       : activePage === 'Settings' ? <Settings companion={companion} /> : <section className="placeholder" aria-labelledby="placeholder-title"><h2 id="placeholder-title">Not implemented yet</h2><p>{page.description}</p></section>}
     {activePage !== 'Queue' && !isConversionPage(activePage) && jobIsBusy(conversion.job) && <JobStatus controller={conversion} />}
     {activePage !== 'Queue' && activePage !== 'Downloader' && downloadActive(download.job) && <DownloadStatus controller={download} />}

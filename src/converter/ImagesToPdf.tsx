@@ -30,7 +30,7 @@ export default function ImagesToPdf({ conversion: c, selecting }: { conversion: 
     </section>
     <section className="workflow-section" aria-labelledby="pdf-options-heading"><h2 id="pdf-options-heading">PDF options</h2>
       <label className="field-label" htmlFor="pdf-page-size">Page size</label><select id="pdf-page-size" value={c.pageSize} aria-describedby="image-page-defaults" disabled={locked} onChange={e => c.setPageSize(e.target.value as PageSize)}><option value="a4">A4</option><option value="letter">Letter (8.5 × 11 in)</option><option value="legal">Legal (8.5 × 14 in)</option><option value="image">Image sized</option><option value="custom">Custom</option></select>
-      <p className="field-help" id="image-page-defaults">{c.pageSize === 'image' ? '150 DPI with no margins.' : 'Fit images inside 0.5-inch (12.7 mm) margins.'} Aspect ratio and EXIF orientation are preserved.</p>
+      <p className="field-help" id="image-page-defaults">{c.pageSize === 'image' ? '150 DPI with no margins.' : 'Fit images inside 0.5-inch (12.7 mm) margins.'} Aspect ratio and image orientation are preserved.</p>
       {c.pageSize==='custom' && <div className="custom-page-size">
         {(['width','height'] as const).map(axis=><div key={axis}><label className="field-label" htmlFor={`custom-${axis}`}>{axis==='width'?'Width':'Height'}</label><input id={`custom-${axis}`} className="text-input" type="number" step="any" value={c.customSize[axis+'Draft' as 'widthDraft'|'heightDraft'] ?? (Number.isFinite(c.customSize[axis])?displayDimension(c.customSize[axis],c.customSize.unit,Number(c.customSize.dpi)):'')} disabled={locked} aria-invalid={Boolean(c.pageSizeError)} aria-describedby="custom-size-help custom-size-error" onChange={e=>c.setCustomSize(previous=>editDimension(previous,axis,e.target.value))} /></div>)}
         <div><label className="field-label" htmlFor="custom-unit">Unit</label><select id="custom-unit" value={c.customSize.unit} disabled={locked} onChange={e=>c.setCustomSize(previous=>changeUnit(previous,e.target.value as Unit))}><option value="in">Inches</option><option value="cm">Centimeters</option><option value="px">Pixels</option></select></div>
@@ -38,7 +38,7 @@ export default function ImagesToPdf({ conversion: c, selecting }: { conversion: 
         <p className="field-help" id="custom-size-help">Each side must exceed 1 inch and be at most 200 inches. Pixels need DPI (1–2400) to determine physical size. Unit/DPI changes preserve physical dimensions.</p>
         <p id="custom-size-error" className={c.pageSizeError?'selection-error':'sr-only'} role="status">{c.pageSizeError}</p>
       </div>}
-      <details className="supported-inputs field-help"><summary>Image requirements and quality</summary><p>JPEG, PNG, WebP, BMP and TIFF still images. Transparency is flattened onto white; PDF images use JPEG quality 90. Animated/multipage inputs are rejected. Combined limit: 100 million pixels.</p></details>
+      <details className="supported-inputs field-help"><summary>Image requirements and quality</summary><p>JPEG, PNG, WebP, BMP, TIFF and HEIC still images. HEIC uses the primary image with HEIF transformations; 8-bit SDR HEVC only (no HDR, wide-gamut/ICC, alpha/gain maps or sequences). Transparency is flattened onto white; PDF images use JPEG quality 90. Other animated/multipage inputs are rejected. Combined limit: 100 million pixels.</p></details>
     </section>
     <ConversionActions controller={c} file={null} imagesMode />
   </div>;

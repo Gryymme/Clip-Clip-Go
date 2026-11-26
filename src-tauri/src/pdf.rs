@@ -36,10 +36,10 @@ pub struct PdfOptions {
 #[derive(Clone, Copy, Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ImagePageSize {
-    #[default]
     A4,
     Letter,
     Legal,
+    #[default]
     Image,
     Custom {
         width: f64,
@@ -904,7 +904,7 @@ pub fn render_pages(
             let verified = crate::images::decode(&path, control)?;
             if verified.info.width != w as u32
                 || verified.info.height != h as u32
-                || verified.info.format != format
+                || verified.info.format != format.extension()
             {
                 return Err("Rendered page validation failed.".into());
             }

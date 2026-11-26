@@ -1,4 +1,4 @@
-//! Compiled-in, bounded single-image conversion. No subprocesses or engine discovery.
+//! Shared bounded still-image decoding and native output encoding.
 use crate::{
     conversion::stage_output,
     engine::OutputFormat,
@@ -28,7 +28,7 @@ const CORRUPT: &str = "Could not decode this image. It may be corrupt, truncated
 pub struct ImageInfo {
     pub width: u32,
     pub height: u32,
-    pub format: OutputFormat,
+    pub format: String,
     pub has_alpha: bool,
     pub orientation_applied: bool,
 }
@@ -43,7 +43,7 @@ pub fn is_image_input(path: &Path) -> bool {
             .unwrap_or("")
             .to_ascii_lowercase()
             .as_str(),
-        "jpg" | "jpeg" | "png" | "webp" | "bmp" | "tif" | "tiff"
+        "jpg" | "jpeg" | "png" | "webp" | "bmp" | "tif" | "tiff" | "heic"
     )
 }
 fn error(error: image::ImageError) -> String {
@@ -59,7 +59,7 @@ fn format_from_image(format: ImageFormat) -> Result<OutputFormat> {
         ImageFormat::WebP => Ok(OutputFormat::Webp),
         ImageFormat::Bmp => Ok(OutputFormat::Bmp),
         ImageFormat::Tiff => Ok(OutputFormat::Tiff),
-        _ => Err("This file is not a supported JPEG, PNG, WebP, BMP or TIFF image.".into()),
+        _ => Err("This file is not a supported JPEG, PNG, WebP, BMP, TIFF or HEIC image.".into()),
     }
 }
 fn limits() -> Limits {
@@ -272,6 +272,12 @@ pub fn decode(path: &Path, control: &Control) -> Result<Decoded> {
     }
     let mut reader = BufReader::new(file);
     let magic = read::<12>(&mut reader)?;
+    if &magic[4..8] == b"ftyp" {
+        return heic::decode(path, &mut reader, metadata.len(), control);
+    }
+    if path.extension().is_some_and(|s| s.eq_ignore_ascii_case("heic")) {
+        return Err(heic::CORRUPT.into());
+    }
     if magic.starts_with(b"BA") {
         return Err(SINGLE_MESSAGE.into());
     }
@@ -296,7 +302,7 @@ pub fn decode(path: &Path, control: &Control) -> Result<Decoded> {
     let info = ImageInfo {
         width: pixels.width(),
         height: pixels.height(),
-        format: output,
+        format: output.extension().into(),
         has_alpha,
         orientation_applied: orientation != Orientation::NoTransforms,
     };
@@ -403,7 +409,7 @@ pub fn convert_to(
     staged.publish()
 }
 fn validate_output(info: &ImageInfo, format: OutputFormat, dimensions: (u32, u32)) -> Result<()> {
-    if info.format != format || (info.width, info.height) != dimensions || info.orientation_applied
+    if info.format != format.extension() || (info.width, info.height) != dimensions || info.orientation_applied
     {
         return Err(
             "Encoded image format or dimensions did not match. No destination file was published."
@@ -415,3 +421,4 @@ fn validate_output(info: &ImageInfo, format: OutputFormat, dimensions: (u32, u32
 
 #[cfg(test)]
 mod tests;
+mod heic;

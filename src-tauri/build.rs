@@ -8,6 +8,7 @@ fn main() {
     );
     println!("cargo:rerun-if-changed=../scripts/ffmpeg-manifest.json");
     println!("cargo:rerun-if-changed=../third-party/ffmpeg");
+    println!("cargo:rerun-if-changed=../third-party/heic");
     println!("cargo:rerun-if-changed=engine_integrity.rs");
     let manifest: serde_json::Value =
         serde_json::from_str(include_str!("../scripts/ffmpeg-manifest.json")).unwrap();
@@ -92,6 +93,9 @@ fn main() {
             "choose_queue_destination",
             "prepare_download",
             "discard_download",
+            "history_change",
+            "history_open",
+            "history_flush_done",
             "queue_counts",
             "confirm_queue_close",
             "open_queue_output",

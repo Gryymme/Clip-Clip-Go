@@ -12,17 +12,22 @@ try {
  const {default:Shell}=await server.ssrLoadModule('/src/components/AppShell.tsx');
  const {initialSelection}=await server.ssrLoadModule('/src/converter/selection.ts');
  const noop=()=>{};
- const base={engine:null,engineLoading:false,media:null,image:null,pdf:null,pdfPages:'',rangeError:null,outputIsFolder:false,images:[],pageSize:'a4',adding:false,probing:false,probeError:null,error:null,job:null,busy:false,starting:false,cancelling:false,formats:[],availability:null,canConvert:false,preview:{state:{status:'idle',path:''},failed:noop}};
+ const base={engine:null,engineLoading:false,media:null,image:null,pdf:null,pdfPages:'',rangeError:null,outputIsFolder:false,images:[],pageSize:'image',adding:false,probing:false,probeError:null,error:null,job:null,busy:false,starting:false,cancelling:false,formats:[],availability:null,canConvert:false,preview:{state:{status:'idle',path:''},failed:noop}};
  for(const key of ['chooseImages','setPageSize','moveImage','removeImage','startImagePdf','configure','start','cancel','setPdfPages','setCustomSize','selectionError'])base[key]=noop;
  const files=[
   {name:'2026 Annual Review — FINAL (revised after board approval) v12.png',path:'C:\\Projects\\Annual review\\Approved assets\\2026 Annual Review — FINAL (revised after board approval) v12.png',sizeBytes:'134217728'},
-  {name:'IMG_20261120_183022_HDR_portrait_edited_edited.PNG',path:'C:\\Images\\Campaign\\Source images\\IMG_20261120_183022_HDR_portrait_edited_edited.PNG',sizeBytes:'1'},
+  {name:'IMG_20261120_183022_portrait_edited_edited.HEIC',path:'C:\\Images\\Campaign\\Source images\\IMG_20261120_183022_portrait_edited_edited.HEIC',sizeBytes:'1'},
   {name:'最終版_承認済み_販売報告書.TIFF',path:'C:\\Images\\International\\最終版_承認済み_販売報告書.TIFF',sizeBytes:'0'},
  ];
  const {initialSize}=await server.ssrLoadModule('/src/converter/pageSize.ts');
  base.customSize=initialSize;base.pageSizeError=null;
  const fixtures=[];
  function view(page,node){return render(h(Shell,{activePage:page,onNavigate:noop},node));}
+ const fresh=view('Images to PDF',h(ImagesToPdf,{conversion:base,selecting:false}));
+ assert.ok(fresh.includes('value="image" selected=""'));assert.ok(fresh.includes('150 DPI with no margins.'));
+ const custom=view('Images to PDF',h(ImagesToPdf,{conversion:{...base,pageSize:'custom'},selecting:false}));
+ assert.ok(custom.includes('value="8.5"'));assert.ok(custom.includes('value="11"'));assert.ok(custom.includes('value="in" selected=""'));
+ fixtures.push(['Custom defaults',custom]);
  for(const [name,images]of [['Images empty',[]],['Images one',[files[0]]],['Images worst case',files],['Images 100',Array.from({length:100},(_,i)=>({...files[i%3],path:files[i%3].path+`-${i}`}))]]){
   const html=view('Images to PDF',h(ImagesToPdf,{conversion:{...base,images,pageSize:'image'},selecting:false}));assert.equal((html.match(/class="file-summary(?: file-empty)?"/g)??[]).length,images.length+1);assert.ok(html.includes('Image sized'));fixtures.push([name,html]);
  }
@@ -32,6 +37,7 @@ try {
  for(const [name,format,category,extra]of [
   ['Image loading','png','image',{preview:{state:{status:'loading',path:files[0].path},failed:noop}}],
   ['Image fallback','png','image',{image:{width:16384,height:976,format:'png',hasAlpha:true,orientationApplied:true},preview:{state:{status:'fallback',path:files[0].path},failed:noop},canConvert:true}],
+  ['HEIC primary image','heic','image',{image:{width:3024,height:4032,format:'heic',hasAlpha:false,orientationApplied:true},canConvert:true}],
   ['Video','mp4','video',{media:{duration:3723.5,video:{index:0,codec:'h264'},audio:null,container:'mp4',formats:[]}}],
   ['Audio','mp3','audio',{}],['PDF range','pdf','document',{pdf:{pages:500,hasText:true},pdfPages:'1-3, 499-500',outputIsFolder:true}],
   ['Scanned PDF','pdf','document',{pdf:{pages:500,hasText:false},outputIsFolder:true}],

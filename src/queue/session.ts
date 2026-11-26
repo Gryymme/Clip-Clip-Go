@@ -1,3 +1,5 @@
+import {history} from '../history/store';
+import {recordFrom} from '../history/model';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import {listen} from '@tauri-apps/api/event';
 import { useSyncExternalStore } from 'react';
@@ -7,6 +9,7 @@ import type { ConversionJob } from '../converter/conversion';
 import type { DownloadJob, DownloadSettings } from '../downloader/model';
 
 export const queue = new Scheduler();
+queue.onTerminal(entry=>{const record=recordFrom(entry);if(record&&isTauri())void history.change({action:'append',record});});
 export function useQueue() { return useSyncExternalStore(queue.subscribe, queue.getSnapshot, queue.getSnapshot); }
 export const outputBusy = () => queue.getSnapshot().some(e => e.status === 'running' || e.status === 'cancelling');
 // Counts are read directly from the authoritative scheduler at close time.
@@ -19,6 +22,7 @@ if (isTauri()) {
   void Promise.all([
     listen('queue-close-requested', () => { void invoke('confirm_queue_close', counts()); }),
     listen('queue-shutdown', () => queue.shutdown()),
+    listen('history-flush-requested', async()=>{while(queue.getSnapshot().some(e=>['running','cancelling'].includes(e.status)))await new Promise(r=>setTimeout(r,50));await history.drain();await invoke('history_flush_done');}),
   ]).then(() => invoke('queue_counts', counts())).catch(() => {});
 }
 const delay = () => new Promise<void>(resolve => setTimeout(resolve, 250));
@@ -33,14 +37,14 @@ export async function runNative(
   }, signal, update);
 }
 export function submitConversion<T>(type: Exclude<TaskType, 'Downloader'>, title: string, source: string, destination: string, payload: T, start: (snapshot:T) => Promise<ConversionJob>, thumbnail?:Entry['thumbnail']) {
-  const metadata = {type, title, source, destination};
+  const metadata = {type, title, source, destination,summary:type==='Converter'?(payload as {format?:string}).format?.toUpperCase():type==='Images to PDF'?`PDF · ${JSON.stringify((payload as {size?:unknown}).size??'default')}`:'PDF · source order'};
   return queue.submitSnapshot({...metadata, thumbnail}, payload, (snapshot, signal, update) => runNative('conversion', () => start(snapshot), signal, update), JSON.stringify([metadata, payload]));
 }
 export async function submitDownload(inspectionId: number, settings: DownloadSettings, name: string, title: string, source: string) {
   const snapshot = structuredClone({inspectionId, settings, name});
-  const prepared = await invoke<{ticket:number; destination:string}>('prepare_download', snapshot);
+  const prepared = await invoke<{ticket:number; destination:string;sourceHost:string}>('prepare_download', snapshot);
   try {
-    const id = queue.submit({type:'Downloader', title, source, destination:prepared.destination, thumbnail:{category:settings.mode==='audio'?'audio':'video',state:{status:'idle',path:''}}}, {
+    const id = queue.submit({type:'Downloader', title, source, sourceHost:prepared.sourceHost, summary:`${settings.format.toUpperCase()} · ${settings.mode} · ${settings.quality}${settings.resolution?' · '+settings.resolution+'p':''}`, destination:prepared.destination, thumbnail:{category:settings.mode==='audio'?'audio':'video',state:{status:'idle',path:''}}}, {
       run:(signal, update) => runNative('download', () => invoke<DownloadJob>('start_download', {ticket:prepared.ticket}), signal, update),
       dispose:() => invoke('discard_download', {ticket:prepared.ticket}),
     }, JSON.stringify(['download', snapshot, prepared.destination]));

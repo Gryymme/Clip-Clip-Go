@@ -125,9 +125,10 @@ impl Runtime {
     let mut inner = self.inner.lock().unwrap();
     let folder = inner.folder.clone().ok_or("Choose a destination folder first.")?;
     let destination = folder.join(format!("{}.{}", filename(&name), settings.format));
+    let source_host=tauri::Url::parse(inspected.input.url()).ok().and_then(|u|u.host_str().map(str::to_owned)).unwrap_or_else(||"Online media".into());
     let ticket = self.sequence.fetch_add(1, Ordering::SeqCst) + 1;
     inner.prepared.insert(ticket, Prepared { inspected, settings, name, folder });
-    Ok(json!({"ticket":ticket,"destination":destination.to_string_lossy()}))
+    Ok(json!({"ticket":ticket,"destination":destination.to_string_lossy(),"sourceHost":source_host}))
     }
     fn point(&self, id: u64, stage: &str, p: DownloadProgress) {
         self.update(id, |j| {

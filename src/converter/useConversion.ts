@@ -1,6 +1,6 @@
 import {useCallback, useEffect, useRef, useState, type Dispatch} from 'react';
 import {gifDimensions, defaultGifOptions, type GifOptions} from './gif';
-import {initialSize, sizeError, sizePayload, type PageSize} from './pageSize';
+import {initialPageSize, initialSize, sizeError, sizePayload, type PageSize} from './pageSize';
 import {isDocumentRoute} from './formats';
 import {appendDroppedImages, addImages, moveImage, pageRangeError} from './pdf';
 import {useImagePreviews} from './useImagePreviews';
@@ -21,7 +21,7 @@ export function useConversion(selection: SelectionState, dispatch: Dispatch<Sele
   const [pdfPages, setPdfPages] = useState('');
   const [mergeFiles, setMergeFiles] = useState<(NativeFile & {pages?:number; issue?:string})[]>([]);
   const [images, setImages] = useState<NativeFile[]>([]);
-  const [pageSize, setPageSize] = useState<PageSize>('a4');
+  const [pageSize, setPageSize] = useState<PageSize>(initialPageSize);
   const [customSize, setCustomSize] = useState(initialSize);
   const pageSizeError = pageSize === 'custom' ? sizeError(customSize) : null;
   const [adding, setAdding] = useState(false);

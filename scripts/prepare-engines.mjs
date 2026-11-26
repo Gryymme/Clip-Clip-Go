@@ -6,6 +6,7 @@ import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { encoderNames, inside, peImports, requireTarget, sha256, sidecarName } from './engine-tools.mjs';
+import {verifyHeicCodec} from './verify-heic-codec.mjs';
 
 const root = await realpath(fileURLToPath(new URL('../', import.meta.url)));
 const manifestPath = inside(root, 'scripts/ffmpeg-manifest.json');
@@ -18,8 +19,8 @@ for (let i = 0; i < options.length; i++) {
   else if (options[i] === '--verify-only') verifyOnly = true;
   else throw new Error(`Unknown engine preparation option: ${options[i]}`);
 }
-const run = (program, args) => {
-  const result = spawnSync(program, args, { cwd: root, encoding: 'utf8', windowsHide: true, timeout: 60000, maxBuffer: 2 * 1024 * 1024 });
+const run = (program, args, binary=false) => {
+  const result = spawnSync(program, args, { cwd: root, encoding: binary?undefined:'utf8', windowsHide: true, timeout: 60000, maxBuffer: 2 * 1024 * 1024 });
   if (result.error || result.status !== 0) throw new Error(`${path.basename(program)} failed: ${result.error?.message ?? result.stderr ?? result.stdout}`);
   return result.stdout ?? '';
 };
@@ -97,6 +98,8 @@ try {
   const encoders = encoderNames(run(ffmpeg, ['-hide_banner', '-encoders']));
   const missing = manifest.requiredEncoders.filter(name => !encoders.has(name));
   if (missing.length) throw new Error(`Bundled FFmpeg is missing required encoders: ${missing.join(', ')}.`);
+  const heic=verifyHeicCodec(ffmpeg,inside(binaries,sidecarName('ffprobe',target)),run);
+  console.log(`HEIC verified: ${heic.codec}, primary still, transforms and assembled grid; no additional decoder assets.`);
   await writeFile(inside(cache, 'prepared.json'), JSON.stringify({ target, version: manifest.version, manifestSha256: await sha256(manifestPath), archiveSha256: manifest.archive.sha256, binaries: manifest.binaries, imports, encoders: manifest.requiredEncoders }, null, 2) + '\n');
   console.log(`Prepared ${manifest.version}: both x64 executables, licenses and all ${manifest.requiredEncoders.length} required encoders verified.`);
 } finally {

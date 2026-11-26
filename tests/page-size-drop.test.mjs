@@ -1,9 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {initialSize,unitFactor,displayDimension,changeUnit,changeDpi,editDimension,sizePayload,sizeError} from '../src/converter/pageSize.ts';
+import {initialPageSize,initialSize,unitFactor,displayDimension,changeUnit,changeDpi,editDimension,sizePayload,sizeError} from '../src/converter/pageSize.ts';
 import {insideDrop,dropError} from '../src/converter/drop.ts';
 import {appendDroppedImages} from '../src/converter/pdf.ts';
 const near=(a,b)=>assert.ok(Math.abs(a-b)<1e-8,`${a} != ${b}`);
+
+test('fresh defaults keep image sizing independent of the stored Custom dimensions',()=>{
+ assert.equal(initialPageSize,'image');assert.equal(initialSize.unit,'in');
+ assert.equal(displayDimension(initialSize.width,'in',96),'8.5');
+ assert.equal(displayDimension(initialSize.height,'in',96),'11');
+ assert.equal(sizePayload(initialPageSize,initialSize),'image');
+ assert.equal(sizePayload('image',editDimension(initialSize,'width','25')),'image');
+});
 test('custom units use correct physical conversions and repeated switches never drift',()=>{
  near(unitFactor('in',96),72);near(unitFactor('cm',96),72/2.54);near(unitFactor('px',96),.75);
  let s=editDimension(initialSize,'width','8.5');near(s.width,612);
@@ -35,4 +43,6 @@ test('dropped images append in delivered order, deduplicate, report rejected/ove
  const mixed=appendDroppedImages([a],[{...b,name:'file.docx'},b]);assert.deepEqual(mixed.files,[a,b]);assert.equal(mixed.rejected.length,1);
  const full=appendDroppedImages(Array.from({length:99},(_,i)=>f(i)),[f(100),f(101)]);assert.equal(full.files.length,100);assert.equal(full.rejected.length,1);
  assert.deepEqual(appendDroppedImages([a],[b],true).files,[a]);
+ const heic={name:'IMG_20250914_183022_portrait_edited_edited.HEIC',path:'C:/camera.HEIC',sizeBytes:'4096'};
+ assert.deepEqual(appendDroppedImages([a],[heic]).files,[a,heic]);
 });

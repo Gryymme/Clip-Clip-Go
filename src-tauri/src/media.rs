@@ -50,7 +50,7 @@ pub async fn select_images(
             .set_title("Add still images to PDF (maximum 100)")
             .add_filter(
                 "Still images",
-                &["jpg", "jpeg", "png", "webp", "bmp", "tif", "tiff"],
+                &["jpg", "jpeg", "png", "webp", "bmp", "tif", "tiff", "heic"],
             )
             .blocking_pick_files();
         chosen

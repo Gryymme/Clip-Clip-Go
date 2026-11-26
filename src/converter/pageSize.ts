@@ -1,7 +1,8 @@
 export type PageSize = 'a4'|'letter'|'legal'|'image'|'custom';
 export type Unit = 'in'|'cm'|'px';
 export type PageSizePayload = Exclude<PageSize,'custom'> | {custom:{width:number;height:number}};
-export const initialSize = {width:595.2755905511812,height:841.8897637795276,unit:'in' as Unit,dpi:'96',widthDraft:null as string|null,heightDraft:null as string|null};
+export const initialPageSize: PageSize = 'image';
+export const initialSize = {width:612,height:792,unit:'in' as Unit,dpi:'96',widthDraft:null as string|null,heightDraft:null as string|null};
 export type CustomSize = typeof initialSize;
 export function unitFactor(unit:Unit,dpi:number){return unit==='in'?72:unit==='cm'?72/2.54:72/dpi;}
 export function displayDimension(points:number,unit:Unit,dpi:number){return Number((points/unitFactor(unit,dpi)).toPrecision(12)).toString();}

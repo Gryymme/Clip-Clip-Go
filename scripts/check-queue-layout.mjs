@@ -6,7 +6,7 @@ import {mkdir,readFile,writeFile} from 'node:fs/promises';
 import assert from 'node:assert/strict';
 const server=await createServer({server:{middlewareMode:true},appType:'custom'});
 try{
- const {QueueView}=await server.ssrLoadModule('/src/queue/Queue.tsx');
+ const {QueueView}=await server.ssrLoadModule('/src/queue/JobList.tsx');
  const {default:Shell}=await server.ssrLoadModule('/src/components/AppShell.tsx');
  const noop=()=>{};
  const base={id:'1',type:'Converter',title:'Meeting notes → PDF',source:'C:\\Projects\\notes.md',destination:'C:\\Projects\\notes.pdf',status:'waiting',stage:'Waiting',percent:null};
@@ -32,6 +32,11 @@ try{
   if(entries.length===1000){assert.equal((content.match(/class="queue-card"/g)||[]).length,40);assert.match(content,/Page 1 of 25/);}
   return {name,content};
  });
+ for(const entries of [[],worst.filter(e=>['completed','failed','cancelled'].includes(e.status)),Array.from({length:500},(_,i)=>({...base,id:String(i),status:'completed',finishedAt:Date.now(),summary:'PDF'}))]){
+  const html=render(h(QueueView,{historyMode:true,entries,cancel:noop,move:noop,remove:noop,clear:noop,open:noop}));
+  documents.push({name:`History ${entries.length} jobs`,content:render(h(Shell,{activePage:'History',onNavigate:noop},h(QueueView,{historyMode:true,entries,cancel:noop,move:noop,remove:noop,clear:noop,open:noop})))});
+  assert.match(html,/Saved jobs/);assert.ok(!html.includes('Move up'));assert.ok(!html.includes(' processing · '));assert.ok((html.match(/class="queue-card"/g)||[]).length<=40);
+ }
  const css=await readFile('src/styles.css','utf8');
  assert.match(css,/\.queue-card h3[^}]*overflow-wrap: anywhere/);assert.match(css,/\.queue-card-heading[^}]*flex-wrap: wrap/);
  const escaped=JSON.stringify(documents).replace(/</g,'\\u003c');

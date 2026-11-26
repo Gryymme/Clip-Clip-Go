@@ -6,6 +6,33 @@ fn work() -> tempfile::TempDir {
 }
 fn quiet(_: u16, _: u16) {}
 
+#[test]
+fn heic_and_conventional_image_pdf_uses_oriented_pixels_and_image_sized_defaults() {
+    let dir=work();let root=Path::new(env!("CARGO_MANIFEST_DIR"));
+    let heic=root.join("../tests/fixtures/heic/rotated.heic");
+    let png=dir.path().join("landscape.png");
+    image::RgbImage::from_pixel(100,50,image::Rgb([0,0,255])).save(&png).unwrap();
+    let output=dir.path().join("mixed.pdf");let c=Control::default();
+    assert!(matches!(ImagePageSize::default(),ImagePageSize::Image));
+    images_to_pdf(&[heic,png],&output,ImagePageSize::default(),&c,&mut quiet).unwrap();
+    let artifacts=root.join("../.engine-cache/heic/verified");
+    std::fs::create_dir_all(&artifacts).unwrap();
+    std::fs::copy(&output,artifacts.join("mixed.pdf")).unwrap();
+    let _lock=SERIAL.lock().unwrap();
+    let doc=load(library().unwrap(),&output).unwrap();
+    assert_eq!(doc.pages().len(),2);
+    for (i,(w,h)) in [(48.0,64.0),(100.0,50.0)].into_iter().enumerate() {
+        let page=doc.pages().get(i as i32).unwrap();
+        assert!((page.width().value-w*72.0/150.0).abs()<0.01);
+        assert!((page.height().value-h*72.0/150.0).abs()<0.01);
+        let rendered=page.render_with_config(&PdfRenderConfig::new().set_target_size(w as i32,h as i32)).unwrap().as_image().unwrap().to_rgb8();
+        rendered.save(artifacts.join(format!("pdf-page-{}.png",i+1))).unwrap();
+        if i==0 { // Rotated top-left quadrant was originally green, not red.
+            let p=rendered.get_pixel(8,8);assert!(p[1]>200 && p[0]<40,"{p:?}");
+        } else {assert!(rendered.get_pixel(50,25)[2]>220);}
+    }
+}
+
 // Real PDF objects with inherited/shared resources, colliding object IDs across
 // documents, rotated pages, URI and same-document page links. No fixture tools.
 fn merge_fixture(path: &Path, marker: &str, font: &str) {

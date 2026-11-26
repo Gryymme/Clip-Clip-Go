@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod history;
 mod session;
 mod bundled;
 mod companion;
@@ -19,6 +20,7 @@ mod text;
 
 fn main() {
     tauri::Builder::default()
+        .manage(history::Runtime::default())
         .manage(session::Session::default())
         .manage(conversion::Runtime::default())
         .manage(downloader::Runtime::default())
@@ -48,6 +50,9 @@ fn main() {
             conversion::choose_queue_destination,
             downloader::prepare_download,
             downloader::discard_download,
+            history::history_change,
+            history::history_open,
+            session::history_flush_done,
             session::queue_counts,
             session::confirm_queue_close,
             session::open_queue_output,

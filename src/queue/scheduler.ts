@@ -8,6 +8,7 @@ export interface Progress { stage: string; percent: number | null; destination?:
 export interface Entry extends Progress {
   id: string; type: TaskType; title: string; source: string; destination: string;
   status: Status; error?: string;
+  attemptId?:string; startedAt?:number; finishedAt?:number; summary?:string; sourceHost?:string;
   thumbnail?: {category:SelectedFile['category']; state:PreviewState};
 }
 export interface Execution {
@@ -23,6 +24,9 @@ export class Scheduler {
   private controller?: AbortController;
   private activeId?: string;
   private sequence = 0;
+  private sessionId = crypto.randomUUID();
+  private terminalListeners = new Set<(entry:Entry)=>void>();
+  onTerminal = (listener:(entry:Entry)=>void) => {this.terminalListeners.add(listener);return ()=>{this.terminalListeners.delete(listener);};};
   private stopped = false;
   private keys = new Map<string, string>();
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
@@ -48,7 +52,7 @@ export class Scheduler {
     if (!next) return;
     const {id} = next, execution = this.executions.get(id)!;
     this.activeId = id; const controller = this.controller = new AbortController();
-    this.patch(id, {status:'running', stage:'Preparing', percent:null});
+    this.patch(id, {attemptId:`${this.sessionId}-${this.sequence}-${id}`, startedAt:Date.now(), status:'running', stage:'Preparing', percent:null});
     let status: Status = 'completed', error: string | undefined;
     try { await execution.run(controller.signal, p => this.patch(id, {...p, ...(controller.signal.aborted ? {stage:'Cancelling and cleaning up…', percent:null} : {})})); }
     catch (cause) { status = controller.signal.aborted ? 'cancelled' : 'failed'; error = status === 'failed' ? safeError(cause) : undefined; }
@@ -56,7 +60,9 @@ export class Scheduler {
     try { await execution.dispose?.(); } catch { /* Native shutdown also discards remaining tickets. */ }
     this.executions.delete(id);
     for (const [key, value] of this.keys) if (value === id) this.keys.delete(key);
-    this.patch(id, {status, error, stage: status === 'completed' ? 'Output saved and validated.' : status === 'cancelled' ? 'Cancelled.' : error!, percent:null});
+    const terminal:Entry={...this.entries.find(e=>e.id===id)!,finishedAt:Date.now(),status,error,stage:status==='completed'?'Output saved and validated.':status==='cancelled'?'Cancelled.':error!,percent:null};
+    this.patch(id,terminal);
+    for(const listener of this.terminalListeners){try{listener(terminal);}catch{/* History cannot interrupt scheduling. */}}
     this.activeId = undefined; this.controller = undefined; void this.pump();
   }
   cancel(id: string) {

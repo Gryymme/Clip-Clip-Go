@@ -10,7 +10,7 @@ export type ConversionFormat = EngineFormat | ImageFormat | TextFormat | 'pdf';
 export interface PdfInfo { pages: number; hasText: boolean }
 export function isTextFormat(format: string): format is TextFormat { return ['md','html','txt'].includes(format); }
 export interface ImageInfo {
-  width: number; height: number; format: ImageFormat; hasAlpha: boolean; orientationApplied: boolean;
+  width: number; height: number; format: ImageFormat | 'heic'; hasAlpha: boolean; orientationApplied: boolean;
 }
 export interface Availability { format: EngineFormat; available: boolean; reason: string | null }
 export interface EngineReport {

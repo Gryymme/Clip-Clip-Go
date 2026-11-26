@@ -5,7 +5,7 @@ import { categorizeFile, identifyFile, normalizeExtension, inputExtensions, inpu
 const inputCategories = {
   video: ['mp4', 'mkv', 'webm', 'mov'],
   audio: ['mp3', 'wav', 'flac', 'm4a', 'ogg'],
-  image: ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'tiff', 'tif'],
+  image: ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'tiff', 'tif', 'heic'],
   document: ['txt', 'pdf', 'md', 'markdown', 'html', 'htm'],
 };
 
@@ -21,7 +21,7 @@ test('all supported input extensions are categorized case-insensitively', () => 
 });
 
 test('unknown, absent and misleading final extensions are rejected', () => {
-  for (const name of ['report.csv', 'photo.heic', 'movie.mp4.exe', 'report.docx.zip', 'file', 'movie.', '', 'movie.mp4 ']) {
+  for (const name of ['report.csv', 'photo.heif', 'movie.mp4.exe', 'report.docx.zip', 'file', 'movie.', '', 'movie.mp4 ']) {
     assert.equal(categorizeFile(name), null, name);
   }
 });
@@ -54,6 +54,7 @@ const expectedRoutes = {
   webp: ['jpg', 'png', 'webp', 'bmp', 'tiff'],
   bmp: ['jpg', 'png', 'webp', 'bmp', 'tiff'],
   tiff: ['jpg', 'png', 'webp', 'bmp', 'tiff'],
+  heic: ['jpg', 'png', 'webp', 'bmp', 'tiff'],
   txt: ['md', 'html', 'pdf'],
   pdf: ['txt', 'md', 'html', 'png', 'jpg'],
 };

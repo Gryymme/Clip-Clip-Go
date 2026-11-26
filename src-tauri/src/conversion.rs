@@ -881,7 +881,7 @@ pub fn start_images_pdf(
             let path = core.authorize(p)?;
             if !crate::images::is_image_input(&path) {
                 return Err(
-                    "Images to PDF accepts JPEG, PNG, WebP, BMP and TIFF still images only.".into(),
+                    "Images to PDF accepts JPEG, PNG, WebP, BMP, TIFF and HEIC still images only.".into(),
                 );
             }
             Ok(path)

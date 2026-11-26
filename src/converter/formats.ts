@@ -23,6 +23,7 @@ const inputRules = {
   webp: { category: 'image', outputs: imageOutputs },
   bmp: { category: 'image', outputs: imageOutputs },
   tiff: { category: 'image', outputs: imageOutputs },
+  heic: { category: 'image', outputs: imageOutputs },
   txt: { category: 'document', outputs: ['md', 'html', 'pdf'] },
   md: { category: 'document', outputs: ['html', 'txt', 'pdf'] },
   html: { category: 'document', outputs: ['md', 'txt', 'pdf'] },
@@ -88,6 +89,7 @@ export function outputHelp(input: InputFormat, output: OutputFormat): string {
   }
   if (inputRules[input].category === 'video') return 'Choose a video format or extract audio from the video.';
   if (inputRules[input].category === 'audio') return 'Choose an audio output format.';
+  if (input === 'heic') return 'Uses the primary still image, including HEIF rotation and mirroring. 8-bit SDR HEVC only; HDR, wide-gamut/ICC, alpha/gain maps and sequences are unsupported.';
   if (inputRules[input].category === 'image') return 'Convert one still image. Dimensions are preserved after applying EXIF orientation.';
   return 'Choose an output format.';
 }

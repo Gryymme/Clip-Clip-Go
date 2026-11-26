@@ -39,6 +39,7 @@ test('pinned engine manifest and nonrecursive Tauri preparation hooks agree', as
   assert.equal(manifest.source.completeCorrespondingSourceAssembled, false);
   assert.deepEqual(config.bundle.externalBin, ['binaries/ffmpeg', 'binaries/ffprobe', 'binaries/yt-dlp', 'binaries/deno', 'binaries/clipclipgo-native-host']);
   assert.ok(config.bundle.resources['../third-party/ffmpeg/']);
+  assert.equal(config.bundle.resources['../third-party/heic/'],'notices/heic/');
   assert.equal(config.build.beforeDevCommand, 'npm run desktop:dev');
   assert.equal(config.build.beforeBuildCommand, 'npm run desktop:build');
   assert.equal(pkg.scripts['desktop:dev'], 'npm run engines:prepare && npm run downloader:prepare && npm run pdf:prepare && npm run companion:build -- --debug && npm run dev');
