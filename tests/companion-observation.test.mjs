@@ -16,6 +16,29 @@ test('open roots, already-playing elements, dynamic insertion and source changes
  f.nodes.push(f.video('https://cdn.test/inserted'));f.poll();assert.ok(f.sent.some(m=>m.mediaUrl==='https://cdn.test/inserted'));
 }));
 
+test('IMDb canonical video poster and exact VideoObject metadata exclude unrelated page images',()=>fixture('https://www.imdb.com/video/vi3232221721/?playlistId=nm13946181',f=>{
+ const v={...f.video('https://media.test/movie.mp4'),tagName:'VIDEO',readyState:1};f.nodes.push(v);
+ document.querySelectorAll=selector=>selector==='video'?[v]:[];
+ document.querySelector=selector=>({content:selector.includes('og:url')?'https://www.imdb.com/video/vi3232221721/':'https://images.test/poster.jpg?sig=keep%2B'});
+ f.start();assert.equal(f.sent.find(m=>m.type==='dom').posterUrl,'https://images.test/poster.jpg?sig=keep%2B');
+ f.sent.length=0;document.querySelector=selector=>({content:selector.includes('og:url')?'https://www.imdb.com/video/vi999/':'https://images.test/unrelated-logo.jpg'});f.start();assert.equal(f.sent.find(m=>m.type==='dom').posterUrl,null);
+ f.sent.length=0;document.querySelector=()=>null;document.querySelectorAll=selector=>selector==='video'?[v]:[{textContent:JSON.stringify({'@type':'VideoObject',contentUrl:v.currentSrc,thumbnailUrl:'/specific-video.jpg',publisher:{logo:'https://images.test/site-logo.jpg'}})}];f.start();assert.equal(f.sent.find(m=>m.type==='dom').posterUrl,'https://www.imdb.com/specific-video.jpg');
+}));
+
+test('Twitter/X feed posters enrich only matching HTTP media IDs, including late poster updates',()=>fixture('https://x.com/user/status/2125260987767136276',f=>{
+ const make=(id)=>{const v={...f.video('blob:https://x.com/'+id),tagName:'VIDEO',readyState:1};const img={src:`https://pbs.twimg.com/ext_tw_video_thumb/${id}/pu/img/poster.jpg?sig=keep%2B`};v.closest=()=>({querySelectorAll:selector=>selector==='video'?[v]:[{src:'https://pbs.twimg.com/profile_images/avatar.jpg'},img]});return {v,img};};
+ const a=make('111'),b=make('222');f.nodes.push(a.v,b.v);for(const id of ['111','222','333'])f.resources.push({name:`https://video.twimg.com/ext_tw_video/${id}/pu/pl/master.m3u8?sig=keep%2B`,initiatorType:'fetch',startTime:1});
+ f.start();const resources=f.sent.filter(m=>m.resourceTiming);assert.equal(resources.length,3);assert.ok(resources[0].posterUrl.includes('/111/'));assert.ok(resources[1].posterUrl.includes('/222/'));assert.equal(resources[2].posterUrl,undefined);assert.ok(!f.sent.some(m=>m.posterUrl?.includes('profile_images')));
+ a.img.src='https://pbs.twimg.com/ext_tw_video_thumb/111/pu/img/replacement.jpg';f.sent.length=0;f.poll();const update=f.sent.find(m=>m.type==='thumbnail'&&m.mediaUrl.includes('/111/'));assert.ok(update.posterUrl.endsWith('replacement.jpg'));assert.ok(!f.sent.some(m=>m.type==='thumbnail'&&m.mediaUrl.includes('/222/')));
+}));
+
+test('transient frame failure retries once after readiness, then keeps a single static snapshot',()=>fixture('https://local.example/page',f=>{
+ const now=Date.now;let clock=now(),draws=0;Date.now=()=>clock;
+ const v={...f.video('https://cdn.test/video'),tagName:'VIDEO',readyState:2,isConnected:true};f.nodes.push(v);
+ document.createElement=()=>({getContext:()=>({drawImage(){if(++draws===1)throw Error('InvalidState');}}),toDataURL:()=> 'data:image/jpeg;base64,/9j/2Q=='});
+ try{f.start();assert.equal(f.sent.find(m=>m.type==='dom').snapshotUrl,null);clock+=1500;f.poll();assert.ok(f.sent.some(m=>m.snapshotUrl));clock+=1500;f.poll();assert.equal(draws,2);}finally{Date.now=now;}
+}));
+
 test('relative lazy posters stay video-associated; decoded snapshots are bounded and never seek or play',()=>fixture('https://local.example/page',f=>{
  const v={...f.video('https://cdn.test/movie'),tagName:'VIDEO',readyState:2,isConnected:true,getAttribute:name=>name==='data-poster'?'/posters/item.jpg?sig=keep%2B':null};
  let draws=0;document.createElement=()=>({width:0,height:0,getContext:()=>({drawImage(video){assert.equal(video,v);draws++;}}),toDataURL:()=> 'data:image/jpeg;base64,/9j/2Q=='});

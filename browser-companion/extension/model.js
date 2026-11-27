@@ -38,9 +38,9 @@ export function addCandidate(s, data, now = Date.now(), uuid = () => crypto.rand
   if (!kind || !mediaUrl || !Number.isInteger(data.frameId) || data.frameId < 0 || data.frameId > 1_000_000 || data.navigationId !== s.navigationId || data.observedAt < s.startedAt) return false;
   // A full URL is the identity. Never remove signed query parameters or fragments.
   const previous=s.candidates.find(c => c.mediaUrl === mediaUrl && c.frameId === data.frameId);
-  if (previous) { if(!previous.posterUrl&&httpUrl(data.posterUrl))previous.posterUrl=httpUrl(data.posterUrl);if(!previous.snapshotUrl&&safeSnapshot(data.snapshotUrl))previous.snapshotUrl=data.snapshotUrl;if(data.drm===true)previous.drm=true;if (!previous.context.referer && httpUrl(data.referer)) previous.context.referer=httpUrl(data.referer); if (!previous.width && Number.isInteger(data.width) && data.width>0 && data.width<=32768) previous.width=data.width; if (!previous.height && Number.isInteger(data.height) && data.height>0 && data.height<=32768) previous.height=data.height; return false; }
+  if (previous) { if(data.dom===true)previous.domObserved=true;applyThumbnail(previous,data);if(data.drm===true)previous.drm=true;if (!previous.context.referer && httpUrl(data.referer)) previous.context.referer=httpUrl(data.referer); if (!previous.width && Number.isInteger(data.width) && data.width>0 && data.width<=32768) previous.width=data.width; if (!previous.height && Number.isInteger(data.height) && data.height>0 && data.height<=32768) previous.height=data.height; return false; }
   if (s.candidates.some(c => ['hls','dash'].includes(c.mediaType) && new URL(c.mediaUrl).origin === new URL(mediaUrl).origin && c.frameId === data.frameId) && /\.(?:aac|mp4)$/i.test(new URL(mediaUrl).pathname) && /(?:seg|chunk|fragment|init)[-_\d]/i.test(new URL(mediaUrl).pathname)) return false;
-  s.candidates.push({id: uuid(), pageUrl: s.pageUrl, frameUrl: httpUrl(data.frameUrl) ?? s.pageUrl, mediaUrl, mediaType: kind,...(httpUrl(data.posterUrl)?{posterUrl:httpUrl(data.posterUrl)}:{}),...(safeSnapshot(data.snapshotUrl)?{snapshotUrl:data.snapshotUrl}:{}),
+  s.candidates.push({id: uuid(),...(data.dom===true?{domObserved:true}:{}), pageUrl: s.pageUrl, frameUrl: httpUrl(data.frameUrl) ?? s.pageUrl, mediaUrl, mediaType: kind,...(httpUrl(data.posterUrl)?{posterUrl:httpUrl(data.posterUrl)}:{}),...(safeSnapshot(data.snapshotUrl)?{snapshotUrl:data.snapshotUrl}:{}),
     title: typeof data.title === 'string' && data.title.trim() ? Array.from(data.title).slice(0, 1024).join('') : s.title || null,
     width: Number.isInteger(data.width) && data.width > 0 && data.width <= 32768 ? data.width : null,
     height: Number.isInteger(data.height) && data.height > 0 && data.height <= 32768 ? data.height : null,
@@ -52,7 +52,7 @@ export function addCandidate(s, data, now = Date.now(), uuid = () => crypto.rand
 }
 export function addPageCandidate(s,data,now=Date.now()){
  const url=extractorPage(data.extractorPageUrl),frame=httpUrl(data.frameUrl);if(!url||!frame||new URL(url).origin!==new URL(frame).origin||data.navigationId!==s.navigationId)return false;
- const previous=s.candidates.find(c=>c.extractorPageUrl===url&&c.frameId===data.frameId);if(previous){if(!previous.posterUrl&&httpUrl(data.posterUrl))previous.posterUrl=httpUrl(data.posterUrl);if(!previous.snapshotUrl&&safeSnapshot(data.snapshotUrl))previous.snapshotUrl=data.snapshotUrl;return false;}
+ const previous=s.candidates.find(c=>c.extractorPageUrl===url&&c.frameId===data.frameId);if(previous){applyThumbnail(previous,data);return false;}
  s.candidates.push({id:crypto.randomUUID(),pageUrl:s.pageUrl,frameUrl:frame,mediaUrl:'',extractorPageUrl:url,mediaType:'page',...(httpUrl(data.posterUrl)?{posterUrl:httpUrl(data.posterUrl)}:{}),...(safeSnapshot(data.snapshotUrl)?{snapshotUrl:data.snapshotUrl}:{}),title:typeof data.title==='string'?Array.from(data.title).slice(0,1024).join(''):null,width:null,height:null,drm:s.encryptedPages?.includes(url)?true:null,frameId:data.frameId,documentId:String(data.documentId??'').slice(0,128),navigationId:s.navigationId,observedAt:now,expiresAt:now+TTL,context:{referer:null}});if(s.candidates.length>MAX_CANDIDATES)s.candidates.shift();return true;
 }
 export function candidateLabel(c) {
@@ -67,4 +67,17 @@ export function safeSnapshot(value){
  while(i+8<bytes.length){if(bytes.charCodeAt(i++)!==255)return null;const marker=bytes.charCodeAt(i++),length=bytes.charCodeAt(i)*256+bytes.charCodeAt(i+1);if(length<2)return null;
  if([192,193,194].includes(marker)){const h=bytes.charCodeAt(i+3)*256+bytes.charCodeAt(i+4),w=bytes.charCodeAt(i+5)*256+bytes.charCodeAt(i+6);return w>0&&w<=320&&h>0&&h<=180?value:null;}i+=length;}
  }catch{}return null;
+}
+
+function applyThumbnail(candidate,data){
+ const poster=httpUrl(data.posterUrl),snapshot=safeSnapshot(data.snapshotUrl);let changed=false;
+ if(poster&&poster!==candidate.posterUrl){candidate.posterUrl=poster;changed=true;}
+ if(snapshot&&snapshot!==candidate.snapshotUrl){candidate.snapshotUrl=snapshot;changed=true;}
+ return changed;
+}
+// UI metadata only: exact resource, frame and navigation; never creates/reclassifies a source.
+export function updateCandidateThumbnail(session,data){
+ if(data.navigationId!==session.navigationId)return false;
+ const url=httpUrl(data.mediaUrl);if(!url)return false;const candidate=session.candidates.find(c=>c.mediaUrl===url&&c.frameId===data.frameId);
+ return !!candidate&&applyThumbnail(candidate,data);
 }

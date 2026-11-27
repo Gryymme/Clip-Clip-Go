@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {httpUrl,mediaKind,prune,addCandidate,extractorPage,addPageCandidate,TTL,MAX_CANDIDATES} from '../browser-companion/extension/model.js';
 import {watchMedia} from '../browser-companion/extension/detect.js';
+import {grantedOrigin} from '../browser-companion/extension/site-access.js';
+import {wireCandidate} from '../browser-companion/extension/preview.js';
 const page='https://page.example.test/watch?meaning=keep',media='https://cdn.example.test/content?signature=one%2Btwo';
 const session=(now=Date.now())=>({pageUrl:page,title:null,startedAt:now-100,expiresAt:now+TTL,navigationId:'navigation',candidates:[]});
 const data=(s,url=media)=>({mediaUrl:url,contentType:'video/mp4',frameId:0,frameUrl:page,documentId:'doc',navigationId:s.navigationId,observedAt:Date.now()});
@@ -32,11 +34,95 @@ async function detected(mock,tabId,url,id,documentId='main'){
  mock.c.webRequest.onBeforeRequest.emit(d);mock.c.webRequest.onHeadersReceived.emit({...d,statusCode:200,responseHeaders:[{name:'Content-Type',value:'video/mp4'}]});return (await mock.message({type:'state'})).session;
 }
 function mockChrome(sessionData={}){
- const sessions={...sessionData};let port;const runtime={id:'abcdefghijklmnopabcdefghijklmnop',lastError:null,onMessage:event(),onStartup:event(),onInstalled:event(),getURL:path=>'chrome-extension://abcdefghijklmnopabcdefghijklmnop/'+path,connectNative(){port={onMessage:event(),onDisconnect:event(),postMessage(m){queueMicrotask(()=>port.onMessage.emit({v:1,requestId:m.requestId,ok:true,code:m.type==='hello'?'connected':'accepted',message:m.type==='hello'?'Connected to ClipClipGO.':'Source received.'}));},disconnect(){port.onDisconnect.emit();}};return port;}};
+ const sessions={...sessionData},sentNative=[];let port;const runtime={id:'abcdefghijklmnopabcdefghijklmnop',lastError:null,onMessage:event(),onStartup:event(),onInstalled:event(),getURL:path=>'chrome-extension://abcdefghijklmnopabcdefghijklmnop/'+path,connectNative(){port={onMessage:event(),onDisconnect:event(),postMessage(m){sentNative.push(structuredClone(m));queueMicrotask(()=>port.onMessage.emit({v:1,requestId:m.requestId,ok:true,code:m.type==='hello'?'connected':'accepted',message:m.type==='hello'?'Connected to ClipClipGO.':'Source received.'}));},disconnect(){port.onDisconnect.emit();}};return port;}};
  const grants=new Set(['https://page.example.test/*','https://cdn.example.test/*','https://cdn.test/*']);const c={runtime,storage:{session:{async get(){return structuredClone(sessions);},async set(v){Object.assign(sessions,structuredClone(v));},async clear(){for(const k of Object.keys(sessions))delete sessions[k];},async setAccessLevel(){}},local:{async clear(){}}},tabs:{async sendMessage(){},async query(){return[{id:1,url:page,title:'Delayed playback'}];},onRemoved:event(),onUpdated:event()},webRequest:Object.fromEntries(['onBeforeRequest','onBeforeSendHeaders','onHeadersReceived','onCompleted','onErrorOccurred'].map(n=>[n,event()])),webNavigation:{async getAllFrames(){return[{frameId:0,url:page}];},onBeforeNavigate:event(),onCommitted:event(),onHistoryStateUpdated:event(),onDOMContentLoaded:event()},permissions:{async getAll(){return {origins:[...grants]};},async contains({origins}){return origins.every(o=>grants.has(o));},onRemoved:event(),onAdded:event()},scripting:{async executeScript(){}},alarms:{async create(){},onAlarm:event()}};
  c.tabs.get=async id=>({id});
- const message=m=>new Promise(resolve=>runtime.onMessage.listeners[0](m,{id:runtime.id,url:runtime.getURL('popup.html')},resolve));return{c,message,sessions,grants,get port(){return port;}};
+ const message=m=>new Promise(resolve=>runtime.onMessage.listeners[0](m,{id:runtime.id,url:runtime.getURL('popup.html')},resolve));return{c,message,sessions,grants,sentNative,get port(){return port;}};
 }
+
+test('thumbnail-only updates enrich an existing frame resource without creating or rerouting candidates',async()=>{
+ const mock=mockChrome();globalThis.chrome=mock.c;mock.c.webNavigation.getAllFrames=async()=>[{frameId:0,url:page,documentId:'main'}];await import('../browser-companion/extension/worker.js?thumbnail-association');await mock.message({type:'state'});await detected(mock,1,media,'media');
+ const before=(await mock.message({type:'state'})).session,existing=before.candidates[0];
+ const thumb=(url,documentId='main')=>new Promise(resolve=>mock.c.runtime.onMessage.listeners[0]({type:'thumbnail',navigationId:before.navigationId,mediaUrl:url,posterUrl:'https://cdn.example.test/poster.jpg?sig=keep%2B'},{id:mock.c.runtime.id,tab:{id:1},frameId:0,url:page,documentId},resolve));
+ await thumb(media,'old-document');assert.equal((await mock.message({type:'state'})).session.candidates[0].posterUrl,undefined);await thumb(media);await thumb(media+'&different=1');const after=(await mock.message({type:'state'})).session;
+ assert.equal(after.candidates.length,1);assert.equal(after.candidates[0].id,existing.id);assert.equal(after.candidates[0].mediaUrl,existing.mediaUrl);assert.equal(after.candidates[0].posterUrl,'https://cdn.example.test/poster.jpg?sig=keep%2B');
+ assert.deepEqual(wireCandidate(after.candidates[0]),wireCandidate(existing));await mock.message({type:'clear'});delete globalThis.chrome;
+});
+
+test('reported IMDb/X failure: permitted DOM URLs survive missing CDN grants without enabling CDN monitoring',async()=>{
+ const cases=[['https://www.imdb.com/video/vi3232221721/?playlistId=nm13946181','https://imdb-video.media-imdb.com/fixture/master.m3u8?signature=keep%2B'],['https://x.com/AmmarGill/status/2125260987767136276','https://video.twimg.com/fixture/master.m3u8?signature=keep%2B']];
+ for(const [pageUrl,mediaUrl]of cases){
+  const mock=mockChrome();globalThis.chrome=mock.c;mock.grants.clear();mock.grants.add(new URL(pageUrl).origin+'/*');
+  mock.c.tabs.query=async()=>[{id:1,url:pageUrl}];mock.c.webNavigation.getAllFrames=async()=>[{frameId:0,url:pageUrl,documentId:'doc'}];
+  await import('../browser-companion/extension/worker.js?dom-cdn='+new URL(pageUrl).host);const first=await mock.message({type:'state'});
+  const content=(message,senderUrl=pageUrl)=>new Promise(resolve=>mock.c.runtime.onMessage.listeners[0](message,{id:mock.c.runtime.id,tab:{id:1},frameId:0,url:senderUrl,documentId:'doc'},resolve));
+  const message={type:'dom',navigationId:first.session.navigationId,mediaUrl,observedAt:Date.now(),resourceTiming:true};
+  await content(message);let s=await mock.message({type:'state'});assert.equal(s.session.candidates.length,1);const candidate=s.session.candidates[0];assert.equal(candidate.mediaType,'hls');assert.equal(candidate.mediaUrl,mediaUrl);assert.equal(candidate.pageUrl,pageUrl);
+  assert.equal(candidate.domObserved,true);assert.equal(wireCandidate(candidate).domObserved,undefined);assert.equal(wireCandidate(candidate).mediaUrl,mediaUrl);assert.equal(extractorPage(pageUrl),null);
+  assert.equal((await mock.message({type:'send',id:candidate.id})).code,'accepted');const handed=mock.sentNative.find(m=>m.type==='candidate').candidate;assert.equal(handed.mediaUrl,mediaUrl);assert.equal(handed.domObserved,undefined);
+  // Restoring/reconciling observers must not discard this authorized-document candidate.
+  await mock.message({type:'sync'});assert.equal((await mock.message({type:'state'})).session.candidates[0].id,candidate.id);
+  const network={tabId:1,frameId:0,documentId:'doc',requestId:'ungranted-cdn',url:mediaUrl,initiator:pageUrl,timeStamp:Date.now()+1};
+  mock.c.webRequest.onBeforeRequest.emit(network);mock.c.webRequest.onHeadersReceived.emit({...network,statusCode:200,responseHeaders:[{name:'Content-Type',value:'application/x-mpegurl'}]});
+  s=await mock.message({type:'state'});assert.equal(s.session.observedRequests||0,0);assert.equal(s.session.networkMedia||0,0);assert.ok(s.session.missingOrigins.includes(new URL(mediaUrl).origin));
+  // No unpermitted frame, arbitrary page candidate, blob or media segment becomes transferable.
+  await content({...message,mediaUrl:mediaUrl+'&unpermitted=1'},'https://unpermitted.test/player');
+  for(const url of ['blob:https://x.com/local','https://video.twimg.com/chunk-1.m4s'])await content({...message,mediaUrl:url});
+  assert.equal((await mock.message({type:'state'})).session.candidates.length,1);
+  mock.grants.delete(new URL(pageUrl).origin+'/*');mock.c.permissions.onRemoved.emit();assert.equal((await mock.message({type:'state'})).session,null);
+  await content({...message,mediaUrl:mediaUrl+'&old=1'});assert.equal((await mock.message({type:'state'})).session,null);
+  mock.grants.add(new URL(pageUrl).origin+'/*');mock.c.permissions.onAdded.emit();const regranted=await mock.message({type:'state'});await content({...message,navigationId:regranted.session.navigationId,observedAt:Date.now(),mediaUrl:mediaUrl+'&new=1'});assert.equal((await mock.message({type:'state'})).session.candidates.length,1);
+  await mock.message({type:'clear'});
+ }
+ delete globalThis.chrome;
+});
+
+test('worker diagnostic route reports actual grants, operations and pipeline counts without candidate URLs',async()=>{
+ const mock=mockChrome();globalThis.chrome=mock.c;mock.c.runtime.getManifest=()=>({version:'0.5.3',optional_host_permissions:['https://*/*']});
+ await import('../browser-companion/extension/worker.js?diagnostic');await mock.message({type:'state'});await detected(mock,1,media+'&SECRET','diagnostic');
+ await mock.message({type:'permissionTrace',entry:{action:'request',result:'false',origins:['https://page.example.test/*','https://invalid.test/?SECRET']}});
+ const result=await mock.message({type:'diagnosticReport'});assert.equal(result.ok,true);assert.equal(result.report.version,'0.5.3');assert.equal(result.report.candidates,1);assert.ok(result.report.counters.networkMedia>0);assert.equal(result.report.operations.at(-1).result,'false');assert.ok(!JSON.stringify(result.report).includes('SECRET'));assert.equal(result.report.frames[0].completed,true);assert.equal(result.report.frames[0].heartbeatAgeMs,null);
+ const getAll=mock.c.permissions.getAll;mock.c.permissions.getAll=async()=>{throw Error('SECRET API failure');};const failed=await mock.message({type:'diagnosticReport'});assert.equal(failed.report.permissionRead,'failed');assert.ok(!JSON.stringify(failed).includes('SECRET'));mock.c.permissions.getAll=getAll;
+ await mock.message({type:'clear'});delete globalThis.chrome;
+});
+
+test('IMDb and twitter to X committed redirects retain early direct/manifest candidates and exact page URLs',async()=>{
+ const routes=[['https://imdb.com/video/vi3232221721/?playlistId=nm13946181','https://www.imdb.com/video/vi3232221721/?playlistId=nm13946181','https://fixture.cloudfront.test/media.m3u8?sig=keep%2B','application/vnd.apple.mpegurl'],['https://twitter.com/AmmarGill/status/2125260987767136276','https://x.com/AmmarGill/status/2125260987767136276','https://video.twimg.test/ext_tw_video/file?sig=keep%2B','video/mp4']];
+ for(const [before,after,url,mime] of routes){
+  const mock=mockChrome();let tab={id:1,url:before};globalThis.chrome=mock.c;
+  mock.c.tabs.query=async()=>[tab];for(const u of [before,after,url])mock.grants.add(new URL(u).origin+'/*');
+  mock.c.webNavigation.getAllFrames=async()=>[{frameId:0,url:tab.url,documentId:'doc'}];
+  await import('../browser-companion/extension/worker.js?redirect='+new URL(after).host);await mock.message({type:'state'});
+  tab={id:1,url:after};mock.c.webNavigation.onCommitted.emit({tabId:1,frameId:0,url:after,documentId:'doc'});
+  const d={tabId:1,frameId:0,documentId:'doc',requestId:'early',timeStamp:Date.now()+1,url,initiator:after};
+  mock.c.webRequest.onBeforeRequest.emit(d);mock.c.webRequest.onHeadersReceived.emit({...d,statusCode:206,responseHeaders:[{name:'Content-Type',value:mime}]});
+  const state=await mock.message({type:'state'});assert.equal(state.session.pageUrl,after);assert.equal(state.session.candidates.length,1);assert.equal(state.session.candidates[0].mediaUrl,url);assert.equal(state.session.candidates[0].mediaType,mime==='video/mp4'?'direct':'hls');
+  assert.equal(extractorPage(after),null,'Do not turn every site page into an extractor candidate');await mock.message({type:'clear'});
+ }
+ delete globalThis.chrome;
+});
+
+test('empty frame enumeration is retried; grant/revoke/regrant restarts existing tab observers',async()=>{
+ const mock=mockChrome(),stops=[],injections=[];let frames=[];globalThis.chrome=mock.c;
+ mock.c.tabs.sendMessage=async(id,m)=>stops.push(m.type);mock.c.webNavigation.getAllFrames=async()=>frames;mock.c.scripting.executeScript=async x=>injections.push(x);
+ await import('../browser-companion/extension/worker.js?empty-regrant');let state=await mock.message({type:'state'});assert.ok(state.diagnostics.includes('observer_not_running'));
+ frames=[{frameId:0,url:page,documentId:'main'}];mock.c.alarms.onAlarm.emit();await mock.message({type:'state'});assert.ok(injections.length);
+ await detected(mock,1,media,'first');assert.equal((await mock.message({type:'state'})).session.candidates.length,1);
+ mock.grants.delete('https://page.example.test/*');mock.c.permissions.onRemoved.emit();state=await mock.message({type:'state'});assert.equal(state.session,null);assert.ok(stops.includes('stopClipClipGO'));assert.ok(state.diagnostics.includes('missing_page_access'));
+ mock.grants.add('https://page.example.test/*');mock.c.permissions.onAdded.emit();await mock.message({type:'state'});await detected(mock,1,media+'new','second');assert.equal((await mock.message({type:'state'})).session.candidates.length,1);
+ await mock.message({type:'clear'});delete globalThis.chrome;
+});
+
+test('wildcard grants cover IMDb page and CDN subdomains; an unrelated iframe remains unobserved',async()=>{
+ const mock=mockChrome(),url='https://www.imdb.com/video/vi3232221721/?playlistId=nm13946181',injected=[];globalThis.chrome=mock.c;
+ mock.grants.clear();mock.grants.add('*://*.imdb.com/*');mock.grants.add('https://*.media-amazon.test/*');
+ mock.c.permissions.contains=async({origins})=>origins.every(o=>grantedOrigin(o,[...mock.grants]));mock.c.tabs.query=async()=>[{id:1,url}];
+ mock.c.webNavigation.getAllFrames=async()=>[{frameId:0,url,documentId:'main'},{frameId:2,url:'https://unpermitted.test/player',documentId:'frame'}];mock.c.scripting.executeScript=async args=>injected.push(args.target.frameIds[0]);
+ await import('../browser-companion/extension/worker.js?wildcard-imdb');let state=await mock.message({type:'state'});assert.deepEqual(injected,[0]);assert.ok(state.diagnostics.includes('missing_frame_or_cdn_access'));
+ const d={tabId:1,frameId:0,documentId:'main',requestId:'cdn',timeStamp:Date.now()+1,url:'https://cdn.media-amazon.test/v.m3u8?signature=keep%2B',initiator:url};mock.c.webRequest.onBeforeRequest.emit(d);mock.c.webRequest.onHeadersReceived.emit({...d,statusCode:200,responseHeaders:[{name:'Content-Type',value:'application/x-mpegurl'}]});
+ state=await mock.message({type:'state'});assert.equal(state.session.candidates.length,1);assert.equal(state.session.candidates[0].mediaUrl,d.url);assert.equal(state.session.candidates[0].mediaType,'hls');
+ await mock.message({type:'clear'});delete globalThis.chrome;
+});
 test('actual worker API wiring: scoped requests, delayed media, frames, navigation, suspension and disconnect',async()=>{
  let mock=mockChrome();globalThis.chrome=mock.c;await import('../browser-companion/extension/worker.js?first');await mock.message({type:'start'});
  let snapshot=await mock.message({type:'state'});assert.equal(snapshot.session.candidates.length,0);
@@ -175,7 +261,7 @@ test('restoration checks actual grants even without permission events and revoca
  await mock.message({type:'clear'});delete globalThis.chrome;
 });
 
-test('revoked CDN access clears candidates/context and old DOM reports cannot restore them',async()=>{
+test('revoked CDN access clears network candidates/context but does not revoke authorized document reads',async()=>{
  const mock=mockChrome();globalThis.chrome=mock.c;mock.c.webNavigation.getAllFrames=async()=>[{frameId:0,url:page,documentId:'main'}];
  mock.c.storage.local.clear=async()=>assert.fail('Clearing temporary data must preserve theme preferences');
  await import('../browser-companion/extension/worker.js?revoke-cdn');await detected(mock,1,media,'one');
@@ -183,7 +269,7 @@ test('revoked CDN access clears candidates/context and old DOM reports cannot re
  const dom=m=>new Promise(r=>mock.c.runtime.onMessage.listeners[0](m,{id:mock.c.runtime.id,tab:{id:1},frameId:0,url:page,documentId:'main'},r));
  mock.grants.delete('https://cdn.example.test/*');mock.c.permissions.onRemoved.emit({origins:['https://cdn.example.test/*']});const after=await mock.message({type:'state'});
  assert.ok(after.session);assert.equal(after.session.candidates.length,0);assert.deepEqual(after.session.requests,{});
- await dom({type:'dom',navigationId:after.session.navigationId,mediaUrl:media,observedAt:Date.now()});const limited=await mock.message({type:'state'});assert.equal(limited.session.candidates.length,0);assert.ok(limited.session.missingOrigins.includes('https://cdn.example.test'));
+ await dom({type:'dom',navigationId:after.session.navigationId,mediaUrl:media,observedAt:Date.now()});const limited=await mock.message({type:'state'});assert.equal(limited.session.candidates.length,1);assert.equal(limited.session.candidates[0].domObserved,true);assert.ok(limited.session.missingOrigins.includes('https://cdn.example.test'));
  mock.grants.add('https://cdn.example.test/*');mock.c.permissions.onAdded.emit();await mock.message({type:'state'});
  await dom({type:'dom',navigationId:after.session.navigationId,mediaUrl:media,observedAt:Date.now()});assert.equal((await mock.message({type:'state'})).session.candidates.length,1);
  await mock.message({type:'clear'});delete globalThis.chrome;

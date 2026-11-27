@@ -18,6 +18,12 @@ function settingsFixture(origins=[]){
  const stored={},opened=[],grants=new Set(origins),api={runtime:{id:'abcdefghijklmnopabcdefghijklmnop'},permissions:{getAll:async()=>({origins:[...grants]}),remove:async({origins})=>{for(const o of origins)grants.delete(o);return true;},onAdded:event(),onRemoved:event()},tabs:{create:async args=>opened.push(args)},storage:{local:{set:async data=>Object.assign(stored,data)}}};
  let changed=0,closed=0;const settings=setupSettings({doc,api,onChange:async()=>changed++,onClose:()=>closed++});return {$,doc,before,stored,opened,grants,api,settings,get changed(){return changed;},get closed(){return closed;}};
 }
+
+test('successful narrow revocation does not claim broader access was removed or revoke the covering grant',async()=>{
+ const f=settingsFixture(['https://www.imdb.com/*','*://*.imdb.com/*']);
+ await f.settings.update();const narrow=f.$('site-grants').children.find(row=>row.children[0].textContent==='https://www.imdb.com/*');await narrow.children[1].onclick();
+ assert.ok(!f.grants.has('https://www.imdb.com/*'));assert.ok(f.grants.has('*://*.imdb.com/*'));assert.match(f.$('settings-result').textContent,/Still covered by \*:\/\/\*\.imdb.com/);f.settings.dispose();
+});
 test('origin grants respect scheme, wildcard boundaries, root-page gating and HTTP only',()=>{
  assert.ok(grantedOrigin('https://video.example.test/a',['*://*.example.test/*']));assert.ok(grantedOrigin('http://example.test/',['*://*.example.test/*']));
  assert.equal(grantedOrigin('https://example.test.evil.test/',['https://*.example.test/*']),false);
@@ -58,11 +64,17 @@ test('actual popup uses one Allow/Rescan action, verified pill and collapsed res
  const f=settingsFixture(),calls=[];let refresh;
  const state={ok:true,detection:'permission-needed',session:null,connection:{ok:false,code:'unknown'},tab:{id:1,host:'page.test',origin:'https://page.test'}};
  f.doc.addEventListener=()=>{};const api=f.api;api.tabs.query=async()=>[{id:1,url:'https://page.test/'}];api.runtime.getManifest=()=>({version:'0.5.0'});
- api.permissions.request=async args=>{calls.push(args);return true;};api.webNavigation={onBeforeNavigate:event(),onHistoryStateUpdated:event()};
- api.runtime.sendMessage=async message=>{calls.push(message);if(message.type==='state')return structuredClone(state);if(message.type==='disconnect')state.connection={ok:false,code:'disconnected'};if(message.type==='start'){state.detection='active';state.session={candidates:[]};}return {ok:true};};
+ api.permissions.contains=async()=>true;api.permissions.request=async args=>{calls.push(args);for(const origin of args.origins)f.grants.add(origin);return true;};api.webNavigation={onBeforeNavigate:event(),onHistoryStateUpdated:event()};
+ api.runtime.sendMessage=async message=>{calls.push(message);if(message.type==='state')return structuredClone(state);if(message.type==='disconnect')state.connection={ok:false,code:'disconnected'};if(message.type==='scan'){state.detection='active';state.session={candidates:[]};}return {ok:true};};
  Object.assign(globalThis,{chrome:api,document:f.doc,window:{addEventListener(){}},setInterval:fn=>{refresh=fn;return 1;},clearInterval(){}});
- try{await import('../browser-companion/extension/popup.js?acceptance');assert.equal(f.$('discovery-action').textContent,'Allow');await f.$('discovery-action').onclick();assert.ok(calls.some(c=>c.type==='start'));assert.equal(f.$('discovery-action').textContent,'Rescan');assert.doesNotMatch(f.$('hint').textContent,/Allow this site/);
+ try{await import('../browser-companion/extension/popup.js?acceptance');assert.equal(f.$('discovery-action').textContent,'Allow');await f.$('discovery-action').onclick();assert.ok(calls.some(c=>c.type==='scan'));assert.equal(f.$('discovery-action').textContent,'Rescan');assert.doesNotMatch(f.$('hint').textContent,/Allow this site/);
   await f.$('discovery-action').onclick();assert.ok(calls.some(c=>c.type==='scan'));assert.match(f.$('rescan-note').textContent,/Rescanned permitted frames/);assert.ok(!f.$('result').textContent?.includes('Rescanned'));
+  // Revocation happened externally; the old Rescan label must not bypass a fresh request.
+  f.grants.clear();state.detection='permission-needed';state.session=null;let gesture=true,attempts=0;
+  api.permissions.request=()=>{assert.equal(gesture,true,'Permission API must run synchronously in the click');attempts++;return Promise.resolve(false);};
+  let click=f.$('discovery-action').onclick();gesture=false;await click;assert.equal(attempts,1);assert.equal(f.$('discovery-action').textContent,'Allow');assert.equal(f.$('discovery-action').disabled,false);assert.match(f.$('result').textContent,/not granted/);
+  gesture=true;api.permissions.request=()=>{assert.equal(gesture,true);attempts++;throw Error('gesture/API failure');};click=f.$('discovery-action').onclick();gesture=false;await click;assert.equal(attempts,2);assert.match(f.$('result').textContent,/request failed/);
+  api.permissions.request=async()=>{f.grants.add('https://page.test/*');return true;};await f.$('discovery-action').onclick();assert.equal(f.$('discovery-action').textContent,'Rescan');
   state.connection={ok:true,code:'unknown',extensionId:'saved'};await refresh();assert.equal(f.$('connect').textContent,'Connect');
   state.connection={ok:true,code:'connected'};await refresh();assert.equal(f.$('connect').textContent,'Connected');assert.equal(f.$('disconnect').hidden,false);assert.equal(f.$('connect').hidden,false);await f.$('connect').onclick();assert.ok(calls.some(c=>c.type==='disconnect'));assert.equal(f.$('connect').textContent,'Connect');
  }finally{Object.assign(globalThis,saved);}
