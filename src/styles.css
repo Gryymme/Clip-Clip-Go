@@ -309,3 +309,30 @@ progress:indeterminate::-webkit-progress-value { background: transparent; }
 .history-filters {display:flex;flex-wrap:wrap;gap:var(--space-3);margin-block-end:var(--space-5);}
 .history-filters label {min-inline-size:0;flex:1 1 10rem;font-size:var(--text-small);}
 .history-filters input,.history-filters select {inline-size:100%;margin-block-start:var(--space-2);}
+
+/* Shared interaction feedback; routing and layout never wait for motion. */
+:root{--motion-fast:100ms;--motion-dialog:140ms;--motion-ease:cubic-bezier(.23,1,.32,1)}
+.button{transition:background-color var(--motion-fast),border-color var(--motion-fast),color var(--motion-fast),transform var(--motion-fast)}
+@media(prefers-reduced-motion:no-preference){.button:enabled:active:not(:focus-visible){transform:scale(.98)}}
+.sidebar-navigation{position:relative;isolation:isolate}
+.navigation-highlight{position:absolute;pointer-events:none;visibility:hidden;z-index:-1;background:var(--color-accent-surface);border-radius:var(--radius-control);transform-origin:top left}
+.navigation-button[aria-current="page"]{background:transparent}
+@media(prefers-reduced-motion:no-preference){.companion-dialog[open]{animation:dialog-enter var(--motion-dialog) var(--motion-ease)}.companion-dialog[open]::backdrop{animation:overlay-enter var(--motion-dialog) linear}}
+@keyframes dialog-enter{from{opacity:0;transform:translateY(4px) scale(.99)}to{opacity:1;transform:none}}
+@keyframes overlay-enter{from{opacity:0}to{opacity:1}}
+
+.companion-dialog[data-closing]::backdrop{opacity:0;transition:opacity var(--motion-fast)}
+.companion-dialog[data-closing] button{pointer-events:none}
+
+/* Semantic dismissal/destructive actions share one treatment in both themes. */
+.button.button-destructive:enabled:hover,.button.button-destructive:enabled:active{color:#fff;background:#b91c1c;border-color:#b91c1c}
+.settings-categories>section+section{border-top:1px solid var(--color-border);padding-top:var(--space-5);margin-top:var(--space-5)}
+.field-help,.settings-categories>section>p,.companion-panel>p{font-size:var(--text-small);color:var(--color-secondary);line-height:1.5}
+.settings-categories .selection-error{color:var(--color-error)}
+p+.button,p+.companion-actions,p+.queue-actions,.field-help+.button{margin-top:var(--space-3)}
+.setup-dialog-heading{position:sticky;top:calc(-1 * (var(--space-5) - var(--space-1)));z-index:2;display:flex;align-items:center;gap:var(--space-3);justify-content:space-between;background:var(--color-background);padding-block:var(--space-2)}
+.setup-dialog-heading h2{margin:0}.setup-dialog-heading button{flex:0 0 auto}
+.connection-pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--color-border);border-radius:var(--radius-control);padding:4px 8px;font-size:var(--text-small);color:var(--color-secondary);margin-block:var(--space-2)}
+.connection-pill::before{content:'';width:7px;height:7px;flex:none;background:#dc2626;border-radius:50%}.connection-pill[data-connected=true]::before{background:#16a34a}
+summary,a{transition:color var(--motion-fast),background-color var(--motion-fast)}
+@media(hover:hover){summary:hover{color:var(--color-text)}}

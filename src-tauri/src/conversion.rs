@@ -86,12 +86,20 @@ impl Drop for Operation {
     }
 }
 impl Core {
-    pub fn record_output(&self, path: &Path) { self.inner.lock().unwrap().outputs.insert(path.to_owned()); }
-    pub fn owned_output(&self, path: &Path) -> bool { self.inner.lock().unwrap().outputs.contains(path) }
-    pub fn stop_submissions(&self) { self.stopping.store(true, Ordering::SeqCst); }
+    pub fn record_output(&self, path: &Path) {
+        self.inner.lock().unwrap().outputs.insert(path.to_owned());
+    }
+    pub fn owned_output(&self, path: &Path) -> bool {
+        self.inner.lock().unwrap().outputs.contains(path)
+    }
+    pub fn stop_submissions(&self) {
+        self.stopping.store(true, Ordering::SeqCst);
+    }
     pub(crate) fn reserve(self: &Arc<Self>) -> Result<Operation> {
         let mut inner = self.inner.lock().unwrap();
-        if self.stopping.load(Ordering::SeqCst) { return Err("The application is closing.".into()); }
+        if self.stopping.load(Ordering::SeqCst) {
+            return Err("The application is closing.".into());
+        }
         if inner.active.is_some() {
             return Err("Another engine operation is in progress. Wait for it to finish.".into());
         }
@@ -104,10 +112,15 @@ impl Core {
     }
     pub(crate) fn inspect(self: &Arc<Self>) -> Result<Operation> {
         let mut inner = self.inner.lock().unwrap();
-        if self.stopping.load(Ordering::SeqCst) { return Err("The application is closing.".into()); }
+        if self.stopping.load(Ordering::SeqCst) {
+            return Err("The application is closing.".into());
+        }
         let control = Arc::new(Control::default());
         inner.inspections.push(control.clone());
-        Ok(Operation { core: self.clone(), control })
+        Ok(Operation {
+            core: self.clone(),
+            control,
+        })
     }
     pub fn settled(&self) -> bool {
         let inner = self.inner.lock().unwrap();
@@ -119,7 +132,10 @@ impl Core {
             return Err("Choose the destination in the app's Save dialog.".into());
         }
         if path.exists() || !path.parent().is_some_and(|p| p.is_dir()) {
-            return Err("The destination exists or its folder is inaccessible. Choose a new destination.".into());
+            return Err(
+                "The destination exists or its folder is inaccessible. Choose a new destination."
+                    .into(),
+            );
         }
         Ok(path)
     }
@@ -161,9 +177,16 @@ impl Core {
     pub fn shutdown(&self) {
         let controls = {
             let inner = self.inner.lock().unwrap();
-            inner.active.iter().chain(inner.inspections.iter()).cloned().collect::<Vec<_>>()
+            inner
+                .active
+                .iter()
+                .chain(inner.inspections.iter())
+                .cloned()
+                .collect::<Vec<_>>()
         };
-        for control in controls { control.cancel(); }
+        for control in controls {
+            control.cancel();
+        }
     }
 }
 
@@ -277,7 +300,9 @@ pub fn command_args(
     format: OutputFormat,
     media: &MediaInfo,
 ) -> Result<Vec<String>> {
-    if format == OutputFormat::Gif { return Err("GIF requires the typed palette conversion plan.".into()); }
+    if format == OutputFormat::Gif {
+        return Err("GIF requires the typed palette conversion plan.".into());
+    }
     if format.image() || format.text() || format == OutputFormat::Pdf {
         return Err("Image formats cannot use the audio/video runner.".into());
     }
@@ -803,19 +828,39 @@ pub fn start_conversion(
                 }
             });
             if format == OutputFormat::Gif {
-                return crate::gif::convert_to(engines,&input,&destination,&media,gif_options.unwrap_or_default(),&operation.control,&NativeRunner,Some(progress),|stage| {
-                    core.update(id,|j| {
-                        if j.phase == JobPhase::Cancelling {return;}
-                        j.seconds=0.0;j.percent=None;
-                        j.phase=if stage=="verifying" || stage=="publishing" {JobPhase::Verifying} else {JobPhase::Running};
-                        j.message=match stage {
-                            "palette"=>"Analyzing clip colors to generate a GIF palette…",
-                            "encoding"=>"Encoding animated GIF with the generated palette…",
-                            "verifying"=>"Validating GIF frames, dimensions, timing and continuous loop…",
-                            _=>"Publishing validated GIF…",
-                        }.into();
-                    });
-                });
+                return crate::gif::convert_to(
+                    engines,
+                    &input,
+                    &destination,
+                    &media,
+                    gif_options.unwrap_or_default(),
+                    &operation.control,
+                    &NativeRunner,
+                    Some(progress),
+                    |stage| {
+                        core.update(id, |j| {
+                            if j.phase == JobPhase::Cancelling {
+                                return;
+                            }
+                            j.seconds = 0.0;
+                            j.percent = None;
+                            j.phase = if stage == "verifying" || stage == "publishing" {
+                                JobPhase::Verifying
+                            } else {
+                                JobPhase::Running
+                            };
+                            j.message = match stage {
+                                "palette" => "Analyzing clip colors to generate a GIF palette…",
+                                "encoding" => "Encoding animated GIF with the generated palette…",
+                                "verifying" => {
+                                    "Validating GIF frames, dimensions, timing and continuous loop…"
+                                }
+                                _ => "Publishing validated GIF…",
+                            }
+                            .into();
+                        });
+                    },
+                );
             }
             convert_to(
                 &engines,
@@ -835,7 +880,9 @@ pub fn start_conversion(
             )
         })();
         // A terminal snapshot must imply that the native operation slot is free.
-        if let Ok(path) = &result { core.record_output(path); }
+        if let Ok(path) = &result {
+            core.record_output(path);
+        }
         operation.control.cleanup();
         drop(operation);
         core.update(id, |j| match result {
@@ -881,7 +928,8 @@ pub fn start_images_pdf(
             let path = core.authorize(p)?;
             if !crate::images::is_image_input(&path) {
                 return Err(
-                    "Images to PDF accepts JPEG, PNG, WebP, BMP, TIFF and HEIC still images only.".into(),
+                    "Images to PDF accepts JPEG, PNG, WebP, BMP, TIFF and HEIC still images only."
+                        .into(),
                 );
             }
             Ok(path)
@@ -933,7 +981,9 @@ pub fn start_images_pdf(
                 },
             )
         })();
-        if let Ok(path) = &result { core.record_output(path); }
+        if let Ok(path) = &result {
+            core.record_output(path);
+        }
         operation.control.cleanup();
         drop(operation);
         core.update(id, |j| match result {
@@ -971,9 +1021,7 @@ pub fn start_merge_pdf(
         .map(|p| {
             let path = core.authorize(p)?;
             if !crate::pdf::is_input(&path) {
-                return Err(
-                    "Merge PDF accepts PDFs only.".into(),
-                );
+                return Err("Merge PDF accepts PDFs only.".into());
             }
             Ok(path)
         })
@@ -1023,16 +1071,29 @@ pub fn start_merge_pdf(
                         }
                     })
                 },
-                &mut |stage| core.update(id, |j| {
-                    if j.phase != JobPhase::Cancelling {
-                        j.percent = None;
-                        j.phase = if stage == "verifying" || stage == "publishing" { JobPhase::Verifying } else { JobPhase::Running };
-                        j.message = match stage { "writing" => "Writing merged PDF…", "verifying" => "Validating merged pages and dimensions…", _ => "Publishing validated PDF…" }.into();
-                    }
-                }),
+                &mut |stage| {
+                    core.update(id, |j| {
+                        if j.phase != JobPhase::Cancelling {
+                            j.percent = None;
+                            j.phase = if stage == "verifying" || stage == "publishing" {
+                                JobPhase::Verifying
+                            } else {
+                                JobPhase::Running
+                            };
+                            j.message = match stage {
+                                "writing" => "Writing merged PDF…",
+                                "verifying" => "Validating merged pages and dimensions…",
+                                _ => "Publishing validated PDF…",
+                            }
+                            .into();
+                        }
+                    })
+                },
             )
         })();
-        if let Ok(path) = &result { core.record_output(path); }
+        if let Ok(path) = &result {
+            core.record_output(path);
+        }
         operation.control.cleanup();
         drop(operation);
         core.update(id, |j| match result {
@@ -1089,22 +1150,45 @@ mod tests;
 /// Save-dialog authorization is separate from execution; paths never grant arbitrary file access.
 #[tauri::command]
 pub async fn choose_queue_destination(
-    window: tauri::WebviewWindow, state: tauri::State<'_, Runtime>,
-    suggested: String, format: OutputFormat, folder_output: bool,
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, Runtime>,
+    suggested: String,
+    format: OutputFormat,
+    folder_output: bool,
 ) -> Result<Option<String>> {
     let core = state.core.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let mut dialog = window.dialog().file().set_parent(&window)
-            .set_title(if folder_output { "Name a NEW output folder" } else { "Save output without overwriting" })
+        let mut dialog = window
+            .dialog()
+            .file()
+            .set_parent(&window)
+            .set_title(if folder_output {
+                "Name a NEW output folder"
+            } else {
+                "Save output without overwriting"
+            })
             .set_file_name(suggested);
-        if !folder_output { dialog = dialog.add_filter(format.extension().to_uppercase(), &[format.extension()]); }
-        let Some(chosen) = dialog.blocking_save_file() else { return Ok(None); };
-        let mut path = chosen.into_path().map_err(|_| "Could not access that destination.")?;
-        if !folder_output { path.set_extension(format.extension()); }
+        if !folder_output {
+            dialog = dialog.add_filter(format.extension().to_uppercase(), &[format.extension()]);
+        }
+        let Some(chosen) = dialog.blocking_save_file() else {
+            return Ok(None);
+        };
+        let mut path = chosen
+            .into_path()
+            .map_err(|_| "Could not access that destination.")?;
+        if !folder_output {
+            path.set_extension(format.extension());
+        }
         if path.exists() || !path.parent().is_some_and(|p| p.is_dir()) {
-            return Err("Choose a new destination in an accessible folder. Existing outputs are protected.".into());
+            return Err(
+                "Choose a new destination in an accessible folder. Existing outputs are protected."
+                    .into(),
+            );
         }
         core.inner.lock().unwrap().destinations.insert(path.clone());
         Ok(Some(path.to_string_lossy().into_owned()))
-    }).await.map_err(|_| "Could not choose a destination.".to_string())?
+    })
+    .await
+    .map_err(|_| "Could not choose a destination.".to_string())?
 }

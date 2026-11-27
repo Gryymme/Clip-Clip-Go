@@ -13,14 +13,14 @@ test('connection controls require a current handshake and disable repeated attem
 test('ID input and actionable detection states distinguish authorization from connection',()=>{
  for(const id of ['', 'not-an-id','abcdefghijklmnopabcdefghijklmnop;cmd','ABCDEFGHIJKLMNOPABCDEFGHIJKLMNOP','qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq'])assert.ok(extensionIdError(id));
  assert.equal(extensionIdError(' abcdefghijklmnopabcdefghijklmnop '),null);
- for(const detection of ['permission-needed','inactive','expired','origin-changed','navigating','partial','active']){const view=detectionView({ok:true,detection,session:detection==='active'?{candidates:[]}:null});assert.ok(view.message);assert.equal(view.disabled,detection==='navigating');}
- assert.match(detectionView({ok:true,detection:'active',session:{candidates:[{}]}}).message,/1 source detected/);
+ for(const detection of ['permission-needed','inactive','navigating','partial','active']){const view=detectionView({ok:true,detection,session:detection==='active'?{candidates:[]}:null});assert.ok(view.message);assert.equal(view.disabled,detection==='navigating');}
+ assert.match(detectionView({ok:true,detection:'active',session:{candidates:[]}}).message,/playback/);
  assert.equal(detectionView({ok:false}).disabled,true);
 });
 test('complete offline unpacked package and host sidecar are mapped into the app installation',async()=>{
  const folder=new URL('../browser-companion/extension/',import.meta.url),manifest=JSON.parse(await readFile(new URL('manifest.json',folder)));
  const names=await readdir(folder);assert.ok(!names.some(s=>/session|cache|config/i.test(s)));
- const files=['manifest.json',manifest.background.service_worker,manifest.action.default_popup,'model.js','detect.js','popup.js','popup-view.js','popup-state.js','popup.css','fonts/Montserrat-Variable.ttf','fonts/OFL.txt'];
+ const files=['manifest.json',manifest.background.service_worker,manifest.action.default_popup,'model.js','detect.js','popup.js','popup-view.js','popup-state.js','popup-settings.js','theme.js','site-access.js','preview.js','popup.css','fonts/Montserrat-Variable.ttf','fonts/OFL.txt'];
  for(const file of files)assert.ok((await readFile(new URL(file,folder))).length>0,file);
  assert.deepEqual(await readFile(new URL('fonts/Montserrat-Variable.ttf',folder)),await readFile('public/fonts/montserrat/Montserrat-Variable.ttf'));
  assert.match(await readFile(new URL('fonts/OFL.txt',folder),'utf8'),/SIL OPEN FONT LICENSE/);

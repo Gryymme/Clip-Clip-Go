@@ -22,19 +22,7 @@ fn authorized_youtube_fixture() {
     let inspect = |url: &str| -> Media {
         let c = Control::default();
         let stage = workspace(d.path(), &c).unwrap();
-        let mut args = base_args(&t, &e, stage.path());
-        args.extend(
-            [
-                "--dump-single-json",
-                "--skip-download",
-                "--flat-playlist",
-                "--no-warnings",
-                "--no-progress",
-                "--",
-            ]
-            .map(String::from),
-        );
-        args.push(url.into());
+        let args = inspection_args(&t, &e, stage.path(), url);
         let output = NativeRunner
             .run(&t.yt, &args, &c, Some(Duration::from_secs(60)), None)
             .unwrap();

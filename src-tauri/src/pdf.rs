@@ -695,7 +695,9 @@ pub fn merge_pdfs(
         return Err("Choose between 2 and 100 PDFs.".into());
     }
     for input in inputs {
-        if !is_input(input) { return Err("Merge PDF accepts PDF files only.".into()); }
+        if !is_input(input) {
+            return Err("Merge PDF accepts PDF files only.".into());
+        }
         // Check every input, including aliases of the chosen destination.
         crate::conversion::destination_path(input, chosen, OutputFormat::Pdf)?;
     }
@@ -708,8 +710,12 @@ pub fn merge_pdfs(
     for input in inputs {
         control.check()?;
         let result = (|| {
-            bytes = bytes.checked_add(std::fs::metadata(input).map_err(err)?.len()).ok_or("PDF size overflow.")?;
-            if bytes > MAX_PDF { return Err("Selected PDFs exceed the 128 MiB combined input limit.".into()); }
+            bytes = bytes
+                .checked_add(std::fs::metadata(input).map_err(err)?.len())
+                .ok_or("PDF size overflow.")?;
+            if bytes > MAX_PDF {
+                return Err("Selected PDFs exceed the 128 MiB combined input limit.".into());
+            }
             let loaded = load(pdf, input);
             control.check()?;
             let source = loaded?;
@@ -720,7 +726,11 @@ pub fn merge_pdfs(
             for index in source.pages().as_range() {
                 control.check()?;
                 let page = source.pages().get(index).map_err(err)?;
-                let size = (page.width().value, page.height().value, page.rotation().map_err(err)?);
+                let size = (
+                    page.width().value,
+                    page.height().value,
+                    page.rotation().map_err(err)?,
+                );
                 if !size.0.is_finite() || !size.1.is_finite() || size.0 <= 0.0 || size.1 <= 0.0 {
                     return Err(format!("Page {} has invalid dimensions.", index + 1));
                 }
@@ -730,8 +740,13 @@ pub fn merge_pdfs(
             Ok(())
         })();
         result.map_err(|e: String| {
-            if e == crate::process::CANCELLED { e } else {
-                format!("{}: {e}", input.file_name().unwrap_or_default().to_string_lossy())
+            if e == crate::process::CANCELLED {
+                e
+            } else {
+                format!(
+                    "{}: {e}",
+                    input.file_name().unwrap_or_default().to_string_lossy()
+                )
             }
         })?;
     }
@@ -747,7 +762,9 @@ pub fn merge_pdfs(
         control.check()?;
         imported.map_err(|e| format!("{}: {}", input.display(), err(e)))?;
         done += source.pages().len() as u16;
-        if doc.pages().len() != i32::from(done) { return Err("PDF page import was incomplete. Nothing was saved.".into()); }
+        if doc.pages().len() != i32::from(done) {
+            return Err("PDF page import was incomplete. Nothing was saved.".into());
+        }
         progress(done, count);
     }
     control.check()?;
@@ -765,14 +782,23 @@ pub fn merge_pdfs(
     control.check()?;
     stage("verifying");
     control.check()?;
-    if std::fs::metadata(&output.path).map_err(err)?.len() > MAX_PDF { return Err("Merged PDF exceeds the 128 MiB output limit.".into()); }
+    if std::fs::metadata(&output.path).map_err(err)?.len() > MAX_PDF {
+        return Err("Merged PDF exceeds the 128 MiB output limit.".into());
+    }
     let verified = load(pdf, &output.path)?;
-    if verified.pages().len() != i32::from(count) { return Err("Merged PDF page count did not match. Nothing was saved.".into()); }
+    if verified.pages().len() != i32::from(count) {
+        return Err("Merged PDF page count did not match. Nothing was saved.".into());
+    }
     for (index, expected) in dimensions.iter().enumerate() {
         control.check()?;
         let page = verified.pages().get(index as i32).map_err(err)?;
-        if (page.width().value - expected.0).abs() > 0.01 || (page.height().value - expected.1).abs() > 0.01 || page.rotation().map_err(err)? != expected.2 {
-            return Err("Merged PDF page dimensions or rotation did not match. Nothing was saved.".into());
+        if (page.width().value - expected.0).abs() > 0.01
+            || (page.height().value - expected.1).abs() > 0.01
+            || page.rotation().map_err(err)? != expected.2
+        {
+            return Err(
+                "Merged PDF page dimensions or rotation did not match. Nothing was saved.".into(),
+            );
         }
     }
     drop(verified);

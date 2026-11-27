@@ -23,7 +23,7 @@ export function JobStatus({ controller: c }: { controller: ConversionController 
       {job.pagesTotal != null ? <p className="field-help numeric-value">{job.pagesDone ?? 0} of {job.pagesTotal} pages processed</p> : !pageOrStillJob && job.phase === 'running' && <p className="field-help numeric-value">{job.format==='gif' && job.percent===null ? 'Progress is indeterminate for this stage.' : <>{job.percent === null ? 'Duration unavailable · ' : `${Math.floor(job.percent)}% · `}{displayDuration(job.seconds)} processed</>}</p>}
     </>
     <details className="file-location job-paths"><summary>Job file details</summary><dl><div><dt>Input</dt><dd dir="auto">{displayPathText(job.inputPath)}</dd></div>{job.destination && <div><dt>Destination</dt><dd dir="auto">{displayPath(job.destination)}</dd></div>}</dl></details>
-    <button className="button button-secondary" type="button" disabled={c.cancelling || job.phase === 'cancelling'} onClick={() => void c.cancel()}>{c.cancelling || job.phase === 'cancelling' ? 'Cancelling…' : 'Cancel conversion'}</button>
+    <button className="button button-secondary button-destructive" type="button" disabled={c.cancelling || job.phase === 'cancelling'} onClick={() => void c.cancel()}>{c.cancelling || job.phase === 'cancelling' ? 'Cancelling…' : 'Cancel conversion'}</button>
   </section>;
 }
 export function ConversionActions({ controller: c, file, imagesMode = false }: { controller: ConversionController; file: SelectedFile | null; imagesMode?: boolean }) {

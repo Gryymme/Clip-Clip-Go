@@ -246,16 +246,27 @@ mod tests {
     use super::*;
     #[test]
     fn heic_thumbnail_uses_the_transformed_primary_image() {
-        let path=Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/fixtures/heic/rotated.heic");
-        let c=Control::default();
-        let result=image_preview(&path,&c).unwrap();
-        assert_eq!((result.source_width,result.source_height),(Some(48),Some(64)));
-        let bytes=BASE64_STANDARD.decode(result.data_url.split(',').nth(1).unwrap()).unwrap();
-        let thumbnail=image::load_from_memory(&bytes).unwrap().to_rgba8();
-        let decoded=crate::images::decode(&path,&c).unwrap();
-        let expected=image::DynamicImage::ImageRgba8(decoded.pixels).thumbnail(WIDTH,HEIGHT).to_rgba8();
-        assert_eq!(thumbnail.dimensions(),expected.dimensions());
-        assert!(thumbnail.as_raw()==expected.as_raw(),"HEIC preview must show the same oriented primary pixels");
+        let path =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/fixtures/heic/rotated.heic");
+        let c = Control::default();
+        let result = image_preview(&path, &c).unwrap();
+        assert_eq!(
+            (result.source_width, result.source_height),
+            (Some(48), Some(64))
+        );
+        let bytes = BASE64_STANDARD
+            .decode(result.data_url.split(',').nth(1).unwrap())
+            .unwrap();
+        let thumbnail = image::load_from_memory(&bytes).unwrap().to_rgba8();
+        let decoded = crate::images::decode(&path, &c).unwrap();
+        let expected = image::DynamicImage::ImageRgba8(decoded.pixels)
+            .thumbnail(WIDTH, HEIGHT)
+            .to_rgba8();
+        assert_eq!(thumbnail.dimensions(), expected.dimensions());
+        assert!(
+            thumbnail.as_raw() == expected.as_raw(),
+            "HEIC preview must show the same oriented primary pixels"
+        );
     }
     #[test]
     fn requests_cancel_only_owned_work_and_fence_late_starts() {

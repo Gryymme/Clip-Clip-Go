@@ -50,6 +50,8 @@ pub struct Candidate {
     pub page_url: String,
     pub frame_url: String,
     pub media_url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub extractor_page_url: Option<String>,
     pub media_type: String,
     pub title: Option<String>,
     pub width: Option<u32>,
@@ -83,8 +85,26 @@ impl Candidate {
         }
         let page = http_url(&self.page_url)?;
         let frame = http_url(&self.frame_url)?;
-        http_url(&self.media_url)?;
-        if !["direct", "hls", "dash"].contains(&self.media_type.as_str())
+        if self.media_type == "page" {
+            let selected = http_url(
+                self.extractor_page_url
+                    .as_deref()
+                    .ok_or("Missing selected media page.")?,
+            )?;
+            if !self.media_url.is_empty()
+                || selected.origin() != frame.origin()
+                || !extractor_page(&selected)
+                || self.context.referer.is_some()
+            {
+                return Err("Invalid extractor page candidate.".into());
+            }
+        } else {
+            http_url(&self.media_url)?;
+            if self.extractor_page_url.is_some() {
+                return Err("Direct media cannot contain a page override.".into());
+            }
+        }
+        if !["direct", "hls", "dash", "page"].contains(&self.media_type.as_str())
             || self.title.as_ref().is_some_and(|s| {
                 s.len() > 4096
                     || s.chars().count() > 1024
@@ -113,6 +133,40 @@ impl Candidate {
         }
         Ok(())
     }
+}
+pub fn extractor_page(u: &url::Url) -> bool {
+    if u.path().starts_with("//") || u.path().ends_with("//") {
+        return false;
+    }
+    let host = u.host_str().unwrap_or("");
+    let pieces = u.path().trim_matches('/').split('/').collect::<Vec<_>>();
+    let id = |s: &str, max: usize| {
+        !s.is_empty()
+            && s.len() <= max
+            && s.bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"_-".contains(&b))
+    };
+    if [
+        "www.youtube.com",
+        "youtube.com",
+        "m.youtube.com",
+        "www.youtube-nocookie.com",
+    ]
+    .contains(&host)
+    {
+        return u.path() == "/watch"
+            && u.query_pairs()
+                .find(|(k, _)| k == "v")
+                .is_some_and(|(_, v)| v.len() == 11 && id(&v, 11))
+            || pieces.len() == 2
+                && ["shorts", "embed"].contains(&pieces[0])
+                && pieces[1].len() == 11
+                && id(pieces[1], 11);
+    }
+    ["www.instagram.com", "instagram.com"].contains(&host)
+        && pieces.len() == 2
+        && ["p", "reel", "reels"].contains(&pieces[0])
+        && id(pieces[1], 128)
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase", deny_unknown_fields)]
@@ -210,9 +264,29 @@ pub fn write_frame<W: Write, T: Serialize>(writer: &mut W, value: &T) -> Result<
 }
 #[cfg(test)]
 pub(crate) mod tests {
+    #[test]
+    fn extractor_candidates_cannot_override_resources_or_change_frame_origin() {
+        let mut c = candidate();
+        let selected = "https://www.youtube.com/watch?v=irVNGjRFZGk&t=1s";
+        assert!(!serde_json::to_string(&c)
+            .unwrap()
+            .contains("extractorPageUrl"));
+        c.extractor_page_url = Some(selected.into());
+        assert!(c.validate(now()).is_err());
+        c.frame_url = selected.into();
+        c.media_type = "page".into();
+        c.media_url.clear();
+        c.context.referer = None;
+        c.validate(now()).unwrap();
+        c.extractor_page_url = Some("https://www.instagram.com/reel/Other/".into());
+        assert!(c.validate(now()).is_err());
+        c.extractor_page_url = Some("https://www.youtube.com/".into());
+        assert!(c.validate(now()).is_err());
+    }
     use super::*;
     pub fn candidate() -> Candidate {
         Candidate {
+            extractor_page_url: None,
             id: "fixture-1".into(),
             page_url: "https://page.example.test/watch?q=keep".into(),
             frame_url: "https://frame.example.test/player".into(),

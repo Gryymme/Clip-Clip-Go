@@ -1,15 +1,17 @@
 // Pure presentation state, also exercised by headless fixtures.
 export function connectionView(connection,connecting=false){const connected=connection?.ok===true&&connection?.code==='connected';return {connectHidden:connected&&!connecting,disconnectHidden:!connected||connecting,disabled:connecting,label:connecting?'Connecting…':'Connect'};}
 export function detectionView(state) {
-  if(!state.ok)return {message:state.message||'Open a normal HTTP(S) tab outside Incognito.',action:'Activate this tab',disabled:true};
+  if(!state.ok)return {message:state.message||'Open a normal HTTP(S) tab outside Incognito.',action:'Allow',disabled:true};
   const messages={
-    'permission-needed':'Website access is needed. Activate this tab and approve its origin.',
-    inactive:'Detection is not active in this tab. Activate it before playback.',
-    expired:'This tab’s activation expired. Activate it again before playback.',
-    'origin-changed':'Detection paused because this tab changed origin. Activate the current site explicitly.',
-    navigating:'Navigating within the activated site. Waiting for the new page…',
-    partial:'Some permitted frames could not be inspected. Rescan after the player loads.',
-    active:state.session?.candidates.length?`${state.session.candidates.length} ${state.session.candidates.length===1?'source':'sources'} detected in this tab.`:'Listening in this tab. Play the video, or rescan a player already loaded.'
+    'permission-needed':'Allow this site to discover media automatically.',
+    inactive:'Checking website access...',
+    navigating:'Waiting for the new page...',
+    partial:'Some permitted frames could not be inspected. Try Rescan after the player loads.',
+    active:'Start playback, or rescan an already loaded player.'
   };
-  return {message:messages[state.detection]||messages.inactive,action:state.session?'Restart this tab':'Activate this tab',disabled:state.detection==='navigating'};
+  return {message:messages[state.detection]||messages.inactive,action:'Allow',disabled:state.detection==='navigating'};
 }
+export function discoveryLabel(candidates=[],now=Date.now()){
+  return candidates.some(c=>c.expiresAt>now&&(['direct','hls','dash'].includes(c.mediaType)&&httpUrl(c.mediaUrl)||c.mediaType==='page'&&extractorPage(c.extractorPageUrl)))?'Media Detected':'No Media Detected';
+}
+import {httpUrl,extractorPage} from './model.js';

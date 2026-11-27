@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "ClipClipGO Companion",
-  "version": "0.1.0",
+  "version": "0.5.0",
   "minimum_chrome_version": "120",
-  "description": "Find media in tabs you activate and send a selected source to ClipClipGO.",
+  "description": "Find media on sites you permit and send a selected source to ClipClipGO.",
   "permissions": ["activeTab", "scripting", "webRequest", "webNavigation", "storage", "alarms", "nativeMessaging"],
   "optional_host_permissions": ["http://*/*", "https://*/*"],
   "background": { "service_worker": "worker.js", "type": "module" },

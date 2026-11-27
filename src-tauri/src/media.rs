@@ -88,10 +88,7 @@ pub async fn select_pdfs(
             .file()
             .set_parent(&window)
             .set_title("Add PDFs to merge (maximum 100)")
-            .add_filter(
-                "PDF",
-                &["pdf"],
-            )
+            .add_filter("PDF", &["pdf"])
             .blocking_pick_files();
         chosen
             .map(|files| {
@@ -261,15 +258,20 @@ pub async fn claim_drop(
         let mut result = inspect_drop(paths, images_only, &core);
         if pdfs_only.unwrap_or(false) {
             result.files.retain(|file| {
-                if crate::pdf::is_input(Path::new(&file.path)) { true } else {
-                    result.rejected.push(format!("{}: Merge PDF accepts PDFs only.", file.name)); false
+                if crate::pdf::is_input(Path::new(&file.path)) {
+                    true
+                } else {
+                    result
+                        .rejected
+                        .push(format!("{}: Merge PDF accepts PDFs only.", file.name));
+                    false
                 }
             });
         }
         result
     })
-        .await
-        .map_err(|_| "File metadata could not be read.".to_string())
+    .await
+    .map_err(|_| "File metadata could not be read.".to_string())
 }
 
 #[cfg(test)]

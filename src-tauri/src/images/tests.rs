@@ -1,86 +1,150 @@
 use super::*;
 use std::fs;
 fn heic(name: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/fixtures/heic").join(name)
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../tests/fixtures/heic")
+        .join(name)
 }
 #[test]
 fn heic_primary_transforms_tiles_and_every_output_use_the_shared_decoder() {
-    let control=Control::default();
-    let reference=decode(&heic("pattern.heic"),&control).unwrap();
-    assert_eq!(reference.info.format,"heic");
-    assert_eq!(reference.pixels.dimensions(),(64,48));
-    let red=reference.pixels.get_pixel(8,8);assert!(red[0]>220 && red[1]<20);
-    let primary=decode(&heic("primary-second.heic"),&control).unwrap();
-    assert_eq!(primary.pixels,reference.pixels);
-    let rotated=decode(&heic("rotated.heic"),&control).unwrap();
-    assert_eq!(rotated.pixels, image::imageops::rotate270(&reference.pixels));
-    assert_eq!((rotated.info.width,rotated.info.height),(48,64));
+    let control = Control::default();
+    let reference = decode(&heic("pattern.heic"), &control).unwrap();
+    assert_eq!(reference.info.format, "heic");
+    assert_eq!(reference.pixels.dimensions(), (64, 48));
+    let red = reference.pixels.get_pixel(8, 8);
+    assert!(red[0] > 220 && red[1] < 20);
+    let primary = decode(&heic("primary-second.heic"), &control).unwrap();
+    assert_eq!(primary.pixels, reference.pixels);
+    let rotated = decode(&heic("rotated.heic"), &control).unwrap();
+    assert_eq!(
+        rotated.pixels,
+        image::imageops::rotate270(&reference.pixels)
+    );
+    assert_eq!((rotated.info.width, rotated.info.height), (48, 64));
     assert!(rotated.info.orientation_applied);
-    let exif=decode(&heic("rotated-exif.heic"),&control).unwrap();
-    assert!(exif.pixels==rotated.pixels,"Informative EXIF must not rotate the HEIF image twice");
-    let cropped=decode(&heic("cropped.heic"),&control).unwrap();
-    assert_eq!(cropped.pixels.dimensions(),(32,24));
-    assert!(cropped.pixels==image::imageops::crop_imm(&reference.pixels,16,12,32,24).to_image());
-    let transformed=decode(&heic("transformed.heic"),&control).unwrap();
-    assert!(transformed.pixels==image::imageops::flip_vertical(&image::imageops::rotate270(&cropped.pixels)));
-    let mirrored=decode(&heic("mirrored.heic"),&control).unwrap();
-    assert!(mirrored.pixels==image::imageops::flip_vertical(&reference.pixels),"imir=0 flips the image vertically");
-    let grid=decode(&heic("grid.heic"),&control).unwrap();
-    assert_eq!(grid.pixels.dimensions(),(128,48));
-    assert_eq!(image::imageops::crop_imm(&grid.pixels,0,0,64,48).to_image(),reference.pixels);
-    assert!(grid.pixels.get_pixel(96,24)[2]>220);
-    let rotated_grid=decode(&heic("grid-rotated.heic"),&control).unwrap();
-    assert_eq!(rotated_grid.pixels.dimensions(),(48,128));
-    assert!(rotated_grid.pixels==image::imageops::rotate270(&grid.pixels));
-    let dir=dir();
-    let uppercase=dir.path().join("IMG_20250914_183022_portrait_edited.HEIC");
-    fs::copy(heic("rotated.heic"),&uppercase).unwrap();
+    let exif = decode(&heic("rotated-exif.heic"), &control).unwrap();
+    assert!(
+        exif.pixels == rotated.pixels,
+        "Informative EXIF must not rotate the HEIF image twice"
+    );
+    let cropped = decode(&heic("cropped.heic"), &control).unwrap();
+    assert_eq!(cropped.pixels.dimensions(), (32, 24));
+    assert!(
+        cropped.pixels == image::imageops::crop_imm(&reference.pixels, 16, 12, 32, 24).to_image()
+    );
+    let transformed = decode(&heic("transformed.heic"), &control).unwrap();
+    assert!(
+        transformed.pixels
+            == image::imageops::flip_vertical(&image::imageops::rotate270(&cropped.pixels))
+    );
+    let mirrored = decode(&heic("mirrored.heic"), &control).unwrap();
+    assert!(
+        mirrored.pixels == image::imageops::flip_vertical(&reference.pixels),
+        "imir=0 flips the image vertically"
+    );
+    let grid = decode(&heic("grid.heic"), &control).unwrap();
+    assert_eq!(grid.pixels.dimensions(), (128, 48));
+    assert_eq!(
+        image::imageops::crop_imm(&grid.pixels, 0, 0, 64, 48).to_image(),
+        reference.pixels
+    );
+    assert!(grid.pixels.get_pixel(96, 24)[2] > 220);
+    let rotated_grid = decode(&heic("grid-rotated.heic"), &control).unwrap();
+    assert_eq!(rotated_grid.pixels.dimensions(), (48, 128));
+    assert!(rotated_grid.pixels == image::imageops::rotate270(&grid.pixels));
+    let dir = dir();
+    let uppercase = dir.path().join("IMG_20250914_183022_portrait_edited.HEIC");
+    fs::copy(heic("rotated.heic"), &uppercase).unwrap();
     assert!(is_image_input(&uppercase));
     for format in FORMATS {
-        let path=run(&uppercase,&dir.path().join(format!("result.{}",format.extension())),format);
-        let artifacts=Path::new(env!("CARGO_MANIFEST_DIR")).join("../.engine-cache/heic/verified");
+        let path = run(
+            &uppercase,
+            &dir.path().join(format!("result.{}", format.extension())),
+            format,
+        );
+        let artifacts =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../.engine-cache/heic/verified");
         fs::create_dir_all(&artifacts).unwrap();
-        fs::copy(&path,artifacts.join(format!("converted.{}",format.extension()))).unwrap();
-        let result=decode(&path,&control).unwrap();
-        assert_eq!((result.info.width,result.info.height),(48,64));
+        fs::copy(
+            &path,
+            artifacts.join(format!("converted.{}", format.extension())),
+        )
+        .unwrap();
+        let result = decode(&path, &control).unwrap();
+        assert_eq!((result.info.width, result.info.height), (48, 64));
         assert!(!result.info.orientation_applied);
-        if format!=OutputFormat::Jpg {assert_eq!(result.pixels,rotated.pixels);}
+        if format != OutputFormat::Jpg {
+            assert_eq!(result.pixels, rotated.pixels);
+        }
     }
 }
 #[test]
 fn heic_rejects_corrupt_color_variants_and_oversized_headers_and_honors_cancellation() {
-    let dir=dir();let path=dir.path().join("bad.heic");
+    let dir = dir();
+    let path = dir.path().join("bad.heic");
     fixture(&path);
-    assert!(decode(&path,&Control::default()).err().unwrap().contains("HEIC"));
-    let original=fs::read(heic("pattern.heic")).unwrap();
-    for data in [&original[..20],&original[..original.len()/2]] {
-        fs::write(&path,data).unwrap();assert!(decode(&path,&Control::default()).is_err());
+    assert!(decode(&path, &Control::default())
+        .err()
+        .unwrap()
+        .contains("HEIC"));
+    let original = fs::read(heic("pattern.heic")).unwrap();
+    for data in [&original[..20], &original[..original.len() / 2]] {
+        fs::write(&path, data).unwrap();
+        assert!(decode(&path, &Control::default()).is_err());
     }
     // Keep all box lengths valid but destroy the actual HEVC packet.
-    let mut broken=original.clone();let mdat=broken.windows(4).position(|w|w==b"mdat").unwrap();
-    broken[mdat+4..].fill(0);fs::write(&path,broken).unwrap();
-    assert!(decode(&path,&Control::default()).err().unwrap().contains("Could not decode this HEIC"));
-    assert!(decode(&heic("ten-bit.heic"),&Control::default()).err().unwrap().contains("8-bit SDR"));
-    assert!(decode(&heic("alpha.heic"),&Control::default()).err().unwrap().contains("alpha/gain"));
-    let mut reordered=fs::read(heic("transformed.heic")).unwrap();
-    let ipma=reordered.windows(4).position(|w|w==b"ipma").unwrap();
-    reordered.swap(ipma+20,ipma+21);fs::write(&path,reordered).unwrap();
-    assert!(decode(&path,&Control::default()).err().unwrap().contains("unsupported"));
-    let position=original.windows(4).position(|w|w==b"ispe").unwrap();
-    for (width,height) in [(MAX_SIDE+1,1u32),(4001,4000),(u32::MAX,u32::MAX)] {
-        let mut data=original.clone();
-        data[position+8..position+12].copy_from_slice(&width.to_be_bytes());
-        data[position+12..position+16].copy_from_slice(&height.to_be_bytes());
-        fs::write(&path,data).unwrap();
-        assert!(decode(&path,&Control::default()).err().unwrap().contains("safety limits"));
+    let mut broken = original.clone();
+    let mdat = broken.windows(4).position(|w| w == b"mdat").unwrap();
+    broken[mdat + 4..].fill(0);
+    fs::write(&path, broken).unwrap();
+    assert!(decode(&path, &Control::default())
+        .err()
+        .unwrap()
+        .contains("Could not decode this HEIC"));
+    assert!(decode(&heic("ten-bit.heic"), &Control::default())
+        .err()
+        .unwrap()
+        .contains("8-bit SDR"));
+    assert!(decode(&heic("alpha.heic"), &Control::default())
+        .err()
+        .unwrap()
+        .contains("alpha/gain"));
+    let mut reordered = fs::read(heic("transformed.heic")).unwrap();
+    let ipma = reordered.windows(4).position(|w| w == b"ipma").unwrap();
+    reordered.swap(ipma + 20, ipma + 21);
+    fs::write(&path, reordered).unwrap();
+    assert!(decode(&path, &Control::default())
+        .err()
+        .unwrap()
+        .contains("unsupported"));
+    let position = original.windows(4).position(|w| w == b"ispe").unwrap();
+    for (width, height) in [(MAX_SIDE + 1, 1u32), (4001, 4000), (u32::MAX, u32::MAX)] {
+        let mut data = original.clone();
+        data[position + 8..position + 12].copy_from_slice(&width.to_be_bytes());
+        data[position + 12..position + 16].copy_from_slice(&height.to_be_bytes());
+        fs::write(&path, data).unwrap();
+        assert!(decode(&path, &Control::default())
+            .err()
+            .unwrap()
+            .contains("safety limits"));
     }
-    let colr=original.windows(4).position(|w|w==b"nclx").unwrap();
-    for (offset,value) in [(4,12u16),(6,16)] { // Display P3 primaries / PQ transfer
-        let mut data=original.clone();data[colr+offset..colr+offset+2].copy_from_slice(&value.to_be_bytes());
-        fs::write(&path,data).unwrap();assert!(decode(&path,&Control::default()).err().unwrap().contains("unsupported"));
+    let colr = original.windows(4).position(|w| w == b"nclx").unwrap();
+    for (offset, value) in [(4, 12u16), (6, 16)] {
+        // Display P3 primaries / PQ transfer
+        let mut data = original.clone();
+        data[colr + offset..colr + offset + 2].copy_from_slice(&value.to_be_bytes());
+        fs::write(&path, data).unwrap();
+        assert!(decode(&path, &Control::default())
+            .err()
+            .unwrap()
+            .contains("unsupported"));
     }
-    let cancelled=Control::default();cancelled.cancel();
-    assert_eq!(decode(&heic("pattern.heic"),&cancelled).err().unwrap(),crate::process::CANCELLED);
+    let cancelled = Control::default();
+    cancelled.cancel();
+    assert_eq!(
+        decode(&heic("pattern.heic"), &cancelled).err().unwrap(),
+        crate::process::CANCELLED
+    );
     assert!(!dir.path().join("output.png").exists());
 }
 const FORMATS: [OutputFormat; 5] = [

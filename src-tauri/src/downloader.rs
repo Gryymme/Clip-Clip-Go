@@ -90,13 +90,19 @@ impl MediaInput {
     fn url(&self) -> &str {
         match self {
             Self::Page(url) => url,
-            Self::Browser(c) => &c.media_url,
+            Self::Browser(c) => {
+                if c.media_type == "page" {
+                    c.extractor_page_url.as_deref().unwrap_or("")
+                } else {
+                    &c.media_url
+                }
+            }
         }
     }
     fn transport(&self) -> Result<(String, Option<relay::Relay>)> {
         if let Self::Browser(c) = self {
             c.validate(crate::companion::shared::now())?;
-            if c.context.referer.is_some() {
+            if c.media_type != "page" && c.context.referer.is_some() {
                 let relay = relay::Relay::start(c)?;
                 return Ok((relay.url.clone(), Some(relay)));
             }
@@ -105,7 +111,12 @@ impl MediaInput {
     }
 }
 #[derive(Clone)]
-struct Prepared { inspected: Inspected, settings: Settings, name: String, folder: PathBuf }
+struct Prepared {
+    inspected: Inspected,
+    settings: Settings,
+    name: String,
+    folder: PathBuf,
+}
 #[derive(Default)]
 struct Inner {
     job: Option<Job>,
@@ -121,14 +132,35 @@ pub struct Runtime {
     sequence: Arc<AtomicU64>,
 }
 impl Runtime {
-    fn prepare_snapshot(&self, inspected: Inspected, settings: Settings, name: String) -> Result<Value> {
-    let mut inner = self.inner.lock().unwrap();
-    let folder = inner.folder.clone().ok_or("Choose a destination folder first.")?;
-    let destination = folder.join(format!("{}.{}", filename(&name), settings.format));
-    let source_host=tauri::Url::parse(inspected.input.url()).ok().and_then(|u|u.host_str().map(str::to_owned)).unwrap_or_else(||"Online media".into());
-    let ticket = self.sequence.fetch_add(1, Ordering::SeqCst) + 1;
-    inner.prepared.insert(ticket, Prepared { inspected, settings, name, folder });
-    Ok(json!({"ticket":ticket,"destination":destination.to_string_lossy(),"sourceHost":source_host}))
+    fn prepare_snapshot(
+        &self,
+        inspected: Inspected,
+        settings: Settings,
+        name: String,
+    ) -> Result<Value> {
+        let mut inner = self.inner.lock().unwrap();
+        let folder = inner
+            .folder
+            .clone()
+            .ok_or("Choose a destination folder first.")?;
+        let destination = folder.join(format!("{}.{}", filename(&name), settings.format));
+        let source_host = tauri::Url::parse(inspected.input.url())
+            .ok()
+            .and_then(|u| u.host_str().map(str::to_owned))
+            .unwrap_or_else(|| "Online media".into());
+        let ticket = self.sequence.fetch_add(1, Ordering::SeqCst) + 1;
+        inner.prepared.insert(
+            ticket,
+            Prepared {
+                inspected,
+                settings,
+                name,
+                folder,
+            },
+        );
+        Ok(
+            json!({"ticket":ticket,"destination":destination.to_string_lossy(),"sourceHost":source_host}),
+        )
     }
     fn point(&self, id: u64, stage: &str, p: DownloadProgress) {
         self.update(id, |j| {
@@ -296,9 +328,9 @@ fn base_args(t: &Tools, e: &Engines, stage: &Path) -> Vec<String> {
 }
 fn inspection_args(t: &Tools, e: &Engines, stage: &Path, url: &str) -> Vec<String> {
     let mut args = base_args(t, e, stage);
+    args.extend(["--print".into(), metadata::inspection_template()]);
     args.extend(
         [
-            "--dump-single-json",
             "--skip-download",
             "--flat-playlist",
             "--no-warnings",
@@ -357,7 +389,9 @@ fn inspect_input(state: &Runtime, shared: &conversion::Runtime, input: MediaInpu
     }
     {
         let mut i = runtime.inner.lock().unwrap();
-        if i.control.is_some() { return Err("A link inspection is already active. Finish or cancel it first.".into()); }
+        if i.control.is_some() {
+            return Err("A link inspection is already active. Finish or cancel it first.".into());
+        }
         i.job = Some(job.clone());
         i.inspected = None;
         i.control = Some(operation.control.clone());
@@ -445,7 +479,10 @@ pub fn download_status(state: tauri::State<'_, Runtime>, id: Option<u64>) -> Opt
 #[tauri::command]
 pub fn cancel_download(state: tauri::State<'_, Runtime>, id: u64) -> Result<()> {
     let execution = state.inner.lock().unwrap().executions.get(&id).cloned();
-    if let Some(runtime) = execution { runtime.shutdown(); return Ok(()); }
+    if let Some(runtime) = execution {
+        runtime.shutdown();
+        return Ok(());
+    }
     let control = {
         let i = state.inner.lock().unwrap();
         if i.job.as_ref().is_none_or(|j| j.id != id) {
@@ -986,8 +1023,11 @@ fn execute(
 }
 #[tauri::command]
 pub fn prepare_download(
-    state: tauri::State<'_, Runtime>, shared: tauri::State<'_, conversion::Runtime>,
-    inspection_id: u64, settings: Settings, name: String,
+    state: tauri::State<'_, Runtime>,
+    shared: tauri::State<'_, conversion::Runtime>,
+    inspection_id: u64,
+    settings: Settings,
+    name: String,
 ) -> Result<Value> {
     if name.trim().is_empty() || name.chars().count() > 100 {
         return Err("Enter an output filename of 1–100 characters without its extension.".into());
@@ -1002,18 +1042,37 @@ pub fn discard_download(state: tauri::State<'_, Runtime>, ticket: u64) {
 }
 #[tauri::command]
 pub fn start_download(
-    state: tauri::State<'_, Runtime>, shared: tauri::State<'_, conversion::Runtime>, ticket: u64,
+    state: tauri::State<'_, Runtime>,
+    shared: tauri::State<'_, conversion::Runtime>,
+    ticket: u64,
 ) -> Result<Job> {
     let operation = shared.core.reserve()?;
     shared.previews.cancel_all();
-    let Prepared { inspected, settings, name, folder } = state.inner.lock().unwrap().prepared.remove(&ticket)
+    let Prepared {
+        inspected,
+        settings,
+        name,
+        folder,
+    } = state
+        .inner
+        .lock()
+        .unwrap()
+        .prepared
+        .remove(&ticket)
         .ok_or("This queued media is no longer available. Inspect and submit it again.")?;
-    if !folder.is_dir() { return Err("The queued destination folder is inaccessible.".into()); }
-    if let MediaInput::Browser(c) = &inspected.input { c.validate(crate::companion::shared::now())?; }
+    if !folder.is_dir() {
+        return Err("The queued destination folder is inaccessible.".into());
+    }
+    if let MediaInput::Browser(c) = &inspected.input {
+        c.validate(crate::companion::shared::now())?;
+    }
     let engines = shared.core.engines()?;
     let plan = plan::build(&inspected.media, &settings, &engines)?;
     // Output execution has its own status slot; inspecting another link cannot replace it.
-    let runtime = Runtime { sequence: state.sequence.clone(), ..Runtime::default() };
+    let runtime = Runtime {
+        sequence: state.sequence.clone(),
+        ..Runtime::default()
+    };
     let id = runtime.sequence.fetch_add(1, Ordering::SeqCst) + 1;
     let job = Job::new(id, "downloading", "Preparing the selected source streams…");
     {
@@ -1021,7 +1080,12 @@ pub fn start_download(
         i.job = Some(job.clone());
         i.control = Some(operation.control.clone());
     }
-    state.inner.lock().unwrap().executions.insert(id, runtime.clone());
+    state
+        .inner
+        .lock()
+        .unwrap()
+        .executions
+        .insert(id, runtime.clone());
     let output_core = shared.core.clone();
     std::thread::spawn(move || {
         let r = runtime.clone();
@@ -1050,7 +1114,9 @@ pub fn start_download(
                 )
             })
             .map(Some);
-        if let Ok(Some(path)) = &result { output_core.record_output(path); }
+        if let Ok(Some(path)) = &result {
+            output_core.record_output(path);
+        }
         operation.control.cleanup();
         drop(operation);
         runtime.finish(id, result);

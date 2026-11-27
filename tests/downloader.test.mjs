@@ -6,7 +6,7 @@ const f=(id,height,fps,extra={})=>({id,ext:'mp4',video:true,audio:false,uncertai
 const media={title:'Fixture',source:'Local',thumbnail:null,duration:null,formats:[f('1080-30',1080,30),f('1080-60',1080,60),f('duplicate',1080,60,{bitrate:1200}),f('720',720,30),f('audio',null,null,{video:false,audio:true,acodec:'aac'})]};
 const encoders=contract.encoders.map(e=>e.id);
 test('source choices group duplicate resolutions while preserving distinct frame rates',()=>{
- assert.equal(sourceChoices(media).length,3);assert.equal(sourceChoices(media)[0].id,'duplicate');assert.equal(bestVideo(media,initialSettings).id,'duplicate');assert.equal(bestVideo(media,{...initialSettings,videoSource:'720'}).height,720);assert.match(sourceLabel(media.formats[0]),/video only/);assert.match(sourceLabel({...media.formats[0],uncertain:true}),/audio unknown/);
+ assert.equal(sourceChoices(media).length,3);assert.equal(sourceChoices(media)[0].id,'duplicate');assert.equal(bestVideo(media,initialSettings).id,'duplicate');assert.equal(bestVideo(media,{...initialSettings,videoSource:'720'}).height,720);assert.doesNotMatch(sourceLabel(media.formats[0]),/video only/);assert.match(sourceLabel({...media.formats[0],uncertain:true}),/audio unknown/);
 });
 test('frontend consumes the exact authoritative native contract',async()=>{
  assert.deepEqual(contract,JSON.parse(await readFile('src-tauri/src/downloader/compatibility.json','utf8')));

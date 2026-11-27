@@ -19,7 +19,7 @@
     "desktop:build": "npm run engines:prepare && npm run downloader:prepare && npm run pdf:prepare && npm run companion:build && npm run build",
     "test": "node --experimental-strip-types --test tests/*.test.mjs",
     "companion:build": "node scripts/build-companion.mjs",
-    "companion:test": "node --experimental-strip-types --test tests/companion-extension.test.mjs tests/companion-setup.test.mjs",
+    "companion:test": "node --experimental-strip-types --test tests/companion-extension.test.mjs tests/companion-observation.test.mjs tests/companion-preview.test.mjs tests/companion-setup.test.mjs",
     "companion:test-host": "node --test browser-companion/tests/native-host-process.test.mjs",
     "companion:fixtures": "node scripts/serve-companion-fixtures.mjs",
     "companion:check-ui": "node scripts/check-companion-layout.mjs",

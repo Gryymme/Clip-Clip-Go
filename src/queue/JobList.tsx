@@ -24,7 +24,7 @@ export function QueueView({entries, cancel, move, remove, clear, open, actionErr
   const waiting = entries.filter(e => e.status === 'waiting');
   const running = entries.filter(e => ['running','cancelling'].includes(e.status)).length;
   return <div className="session-queue">
-    <div className="section-heading-row"><h2>{historyMode?'Saved jobs':'Session jobs'}</h2><button className="button button-secondary" type="button" disabled={canClear===undefined?!entries.some(e => finished(e.status)):!canClear} onClick={clear}>{historyMode?'Clear history':'Clear finished'}</button></div>
+    <div className="section-heading-row"><h2>{historyMode?'Saved jobs':'Session jobs'}</h2><button className="button button-secondary button-destructive" type="button" disabled={canClear===undefined?!entries.some(e => finished(e.status)):!canClear} onClick={clear}>{historyMode?'Clear history':'Clear finished'}</button></div>
     {support}
     {!historyMode && <p className="field-help numeric-value" role="status">{running.toLocaleString()} processing · {waiting.length.toLocaleString()} waiting · {entries.filter(e => finished(e.status)).length.toLocaleString()} finished</p>}
     {actionError && <p className="selection-error" role="alert">{actionError}</p>}
@@ -46,7 +46,7 @@ export function QueueView({entries, cancel, move, remove, clear, open, actionErr
           {active && <><progress max={100} value={percent} aria-label={`${entry.title} progress`} aria-valuetext={percent === undefined ? 'Progress unavailable for this stage' : `${download?.progressKind === 'estimated' ? 'About ' : ''}${Math.floor(percent)} percent of ${progressUnit}`}/>{percent !== undefined && <p className="field-help numeric-value">{download?.progressKind === 'estimated' ? 'About ' : ''}{Math.floor(percent)}% of {progressUnit}</p>}{measured && <p className="field-help numeric-value">{measured}</p>}</>}
           <div className="queue-actions" role="group" aria-label={`Actions for ${entry.title}`}>
             {entry.status === 'completed' && open && <><button className="button button-secondary" type="button" onClick={() => open(entry, false)}>Open output</button><button className="button button-secondary" type="button" onClick={() => open(entry, true)}>Open folder</button></>}
-            {(active || entry.status === 'waiting') && <button className="button button-secondary" type="button" disabled={entry.status === 'cancelling'} onClick={() => cancel(entry.id)}>{entry.status === 'cancelling' ? 'Cancelling…' : 'Cancel'}</button>}
+            {(active || entry.status === 'waiting') && <button className="button button-secondary button-destructive" type="button" disabled={entry.status === 'cancelling'} onClick={() => cancel(entry.id)}>{entry.status === 'cancelling' ? 'Cancelling…' : 'Cancel'}</button>}
             {entry.status === 'waiting' && <><button className="button button-secondary" type="button" disabled={index === 0} onClick={() => move(entry.id, -1)}>Move up<span className="sr-only"> in waiting jobs</span></button><button className="button button-secondary" type="button" disabled={index === waiting.length - 1} onClick={() => move(entry.id, 1)}>Move down<span className="sr-only"> in waiting jobs</span></button></>}
             {!active && <button className="button button-secondary button-destructive" type="button" onClick={() => remove(entry.id)}>Remove</button>}
           </div>

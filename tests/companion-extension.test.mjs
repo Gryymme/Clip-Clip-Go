@@ -1,11 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {httpUrl,mediaKind,prune,addCandidate,TTL,MAX_CANDIDATES} from '../browser-companion/extension/model.js';
+import {httpUrl,mediaKind,prune,addCandidate,extractorPage,addPageCandidate,TTL,MAX_CANDIDATES} from '../browser-companion/extension/model.js';
 import {watchMedia} from '../browser-companion/extension/detect.js';
 const page='https://page.example.test/watch?meaning=keep',media='https://cdn.example.test/content?signature=one%2Btwo';
 const session=(now=Date.now())=>({pageUrl:page,title:null,startedAt:now-100,expiresAt:now+TTL,navigationId:'navigation',candidates:[]});
 const data=(s,url=media)=>({mediaUrl:url,contentType:'video/mp4',frameId:0,frameUrl:page,documentId:'doc',navigationId:s.navigationId,observedAt:Date.now()});
+test('bounded site page adapters preserve selection and reject feeds, spoofed hosts and segments',()=>{
+ for(const url of ['https://www.youtube.com/watch?v=irVNGjRFZGk&t=1s','https://www.youtube.com/shorts/irVNGjRFZGk','https://www.youtube-nocookie.com/embed/irVNGjRFZGk','https://www.instagram.com/reel/Fixture_1/?img_index=2','https://www.instagram.com/p/Fixture_2/'])assert.equal(extractorPage(url),url);
+ for(const url of ['https://www.youtube.com/','https://www.instagram.com/','https://www.youtube.com.evil.test/watch?v=irVNGjRFZGk','javascript:alert(1)'])assert.equal(extractorPage(url),null);
+ const s=session(),url='https://www.youtube.com/watch?v=irVNGjRFZGk';assert.equal(addPageCandidate(s,{...data(s),extractorPageUrl:url}),false);
+ assert.ok(addPageCandidate(s,{...data(s),frameUrl:url,extractorPageUrl:url}));assert.equal(s.candidates[0].mediaUrl,'');assert.equal(s.candidates[0].extractorPageUrl,url);assert.equal(addPageCandidate(s,{...data(s),frameUrl:url,extractorPageUrl:url}),false);
+ for(const url of ['https://r.googlevideo.com/videoplayback?id=x&range=0-999','https://cdn.test/chunk-1.mp4','https://cdn.test/a.m4s','https://cdn.test/media?bytestart=0'])assert.equal(addCandidate(s,{...data(s,url),dom:true}),false);
+ assert.equal(mediaKind('https://cdn.test/pretend.mp4','application/json'),null);
+});
 test('direct, extensionless, HLS/DASH and segments are classified without query rewriting',()=>{
  assert.equal(mediaKind(media,'video/mp4'),'direct');assert.equal(mediaKind('https://cdn.example.test/index','application/vnd.apple.mpegurl; charset=utf-8'),'hls');assert.equal(mediaKind('https://cdn.example.test/m','application/dash+xml'),'dash');
  for(const path of ['seg-00001.mp4','chunk-13.aac','fragment-2.webm','video.m4s','v.ts'])assert.equal(mediaKind('https://cdn.example.test/'+path,'video/mp4'),null);
@@ -13,10 +21,10 @@ test('direct, extensionless, HLS/DASH and segments are classified without query 
  const s=session();assert.ok(addCandidate(s,data(s),Date.now(),()=> 'id'));assert.equal(s.candidates[0].mediaUrl,media);assert.equal(s.candidates[0].width,null);assert.equal(s.candidates[0].title,null);
  assert.equal(addCandidate(s,data(s)),false);assert.ok(addCandidate(s,data(s,media+'3')));assert.equal(s.candidates.length,2);
 });
-test('candidate bounds, navigation identity, stale results and session expiry',()=>{
+test('candidate bounds, navigation identity, stale results and candidate expiry independent of access',()=>{
  const s=session();for(let i=0;i<1000;i++)addCandidate(s,data(s,media+i),Date.now(),()=>String(i));assert.equal(s.candidates.length,MAX_CANDIDATES);
  assert.equal(addCandidate(s,{...data(s),navigationId:'old'}),false);assert.equal(addCandidate(s,{...data(s),observedAt:s.startedAt-1}),false);
- assert.equal(Object.keys(prune({1:s},s.expiresAt+1)).length,0);assert.equal(Object.keys(prune({1:session(Date.now()+TTL)},Date.now())).length,0);
+ const later=Date.now()+TTL+1000;assert.equal(Object.keys(prune({1:s},later)).length,1);assert.equal(s.candidates.length,0);assert.equal(Object.keys(prune({1:session(Date.now()+TTL)},Date.now())).length,0);
 });
 function event(){const listeners=[];return{addListener(fn){listeners.push(fn);},emit(...args){for(const fn of listeners)fn(...args);},listeners};}
 async function detected(mock,tabId,url,id,documentId='main'){
@@ -24,8 +32,9 @@ async function detected(mock,tabId,url,id,documentId='main'){
  mock.c.webRequest.onBeforeRequest.emit(d);mock.c.webRequest.onHeadersReceived.emit({...d,statusCode:200,responseHeaders:[{name:'Content-Type',value:'video/mp4'}]});return (await mock.message({type:'state'})).session;
 }
 function mockChrome(sessionData={}){
- const sessions={...sessionData};let port;const runtime={id:'abcdefghijklmnopabcdefghijklmnop',lastError:null,onMessage:event(),getURL:path=>'chrome-extension://abcdefghijklmnopabcdefghijklmnop/'+path,connectNative(){port={onMessage:event(),onDisconnect:event(),postMessage(m){queueMicrotask(()=>port.onMessage.emit({v:1,requestId:m.requestId,ok:true,code:m.type==='hello'?'connected':'accepted',message:m.type==='hello'?'Connected to ClipClipGO.':'Source received.'}));},disconnect(){port.onDisconnect.emit();}};return port;}};
- const grants=new Set(['https://page.example.test/*']);const c={runtime,storage:{session:{async get(){return structuredClone(sessions);},async set(v){Object.assign(sessions,structuredClone(v));},async clear(){for(const k of Object.keys(sessions))delete sessions[k];},async setAccessLevel(){}},local:{async clear(){}}},tabs:{async sendMessage(){},async query(){return[{id:1,url:page,title:'Delayed playback'}];},onRemoved:event()},webRequest:Object.fromEntries(['onBeforeRequest','onBeforeSendHeaders','onHeadersReceived','onCompleted','onErrorOccurred'].map(n=>[n,event()])),webNavigation:{async getAllFrames(){return[{frameId:0,url:page}];},onBeforeNavigate:event(),onCommitted:event(),onHistoryStateUpdated:event(),onDOMContentLoaded:event()},permissions:{async contains({origins}){return origins.every(o=>grants.has(o));},onRemoved:event()},scripting:{async executeScript(){}},alarms:{async create(){},onAlarm:event()}};
+ const sessions={...sessionData};let port;const runtime={id:'abcdefghijklmnopabcdefghijklmnop',lastError:null,onMessage:event(),onStartup:event(),onInstalled:event(),getURL:path=>'chrome-extension://abcdefghijklmnopabcdefghijklmnop/'+path,connectNative(){port={onMessage:event(),onDisconnect:event(),postMessage(m){queueMicrotask(()=>port.onMessage.emit({v:1,requestId:m.requestId,ok:true,code:m.type==='hello'?'connected':'accepted',message:m.type==='hello'?'Connected to ClipClipGO.':'Source received.'}));},disconnect(){port.onDisconnect.emit();}};return port;}};
+ const grants=new Set(['https://page.example.test/*','https://cdn.example.test/*','https://cdn.test/*']);const c={runtime,storage:{session:{async get(){return structuredClone(sessions);},async set(v){Object.assign(sessions,structuredClone(v));},async clear(){for(const k of Object.keys(sessions))delete sessions[k];},async setAccessLevel(){}},local:{async clear(){}}},tabs:{async sendMessage(){},async query(){return[{id:1,url:page,title:'Delayed playback'}];},onRemoved:event(),onUpdated:event()},webRequest:Object.fromEntries(['onBeforeRequest','onBeforeSendHeaders','onHeadersReceived','onCompleted','onErrorOccurred'].map(n=>[n,event()])),webNavigation:{async getAllFrames(){return[{frameId:0,url:page}];},onBeforeNavigate:event(),onCommitted:event(),onHistoryStateUpdated:event(),onDOMContentLoaded:event()},permissions:{async getAll(){return {origins:[...grants]};},async contains({origins}){return origins.every(o=>grants.has(o));},onRemoved:event(),onAdded:event()},scripting:{async executeScript(){}},alarms:{async create(){},onAlarm:event()}};
+ c.tabs.get=async id=>({id});
  const message=m=>new Promise(resolve=>runtime.onMessage.listeners[0](m,{id:runtime.id,url:runtime.getURL('popup.html')},resolve));return{c,message,sessions,grants,get port(){return port;}};
 }
 test('actual worker API wiring: scoped requests, delayed media, frames, navigation, suspension and disconnect',async()=>{
@@ -38,9 +47,9 @@ test('actual worker API wiring: scoped requests, delayed media, frames, navigati
  mock.c.webRequest.onBeforeRequest.emit({...request,tabId:99,requestId:'unrelated'});mock.c.webRequest.onHeadersReceived.emit({...request,tabId:99,requestId:'unrelated',statusCode:200,responseHeaders:[{name:'Content-Type',value:'video/mp4'}]});assert.equal((await mock.message({type:'state'})).session.candidates.length,1);
  const saved=structuredClone(mock.sessions);mock=mockChrome(saved);globalThis.chrome=mock.c;await import('../browser-companion/extension/worker.js?resumed');assert.equal((await mock.message({type:'state'})).session.candidates.length,1);
  assert.equal((await mock.message({type:'check'})).code,'connected');assert.equal((await mock.message({type:'send',id:snapshot.session.candidates[0].id})).code,'accepted');const oldPort=mock.port;mock.port.disconnect();assert.equal((await mock.message({type:'state'})).connection.code,'disconnected');assert.equal((await mock.message({type:'check'})).code,'connected');oldPort.onDisconnect.emit();assert.equal((await mock.message({type:'state'})).connection.code,'connected');
- mock.c.webNavigation.onBeforeNavigate.emit({tabId:1,frameId:0});assert.equal((await mock.message({type:'state'})).session,null);
+ mock.c.webNavigation.onBeforeNavigate.emit({tabId:1,frameId:0});assert.equal((await mock.message({type:'state'})).session.candidates.length,0);
  mock.c.webRequest.onHeadersReceived.emit({...request,statusCode:200,responseHeaders:[{name:'Content-Type',value:'video/mp4'}]});await mock.message({type:'start'});assert.equal((await mock.message({type:'state'})).session.candidates.length,0);
- await mock.message({type:'clear'});assert.deepEqual(mock.sessions,{});delete globalThis.chrome;
+ await mock.message({type:'clear'});assert.equal(mock.sessions.sessions[1].candidates.length,0);delete globalThis.chrome;
 });
 test('manifest has no mandatory sites, remote code, sync storage or automatic page script',async()=>{
  const manifest=JSON.parse(await readFile('browser-companion/extension/manifest.json','utf8'));assert.equal(manifest.manifest_version,3);assert.equal(manifest.host_permissions,undefined);assert.equal(manifest.content_scripts,undefined);assert.ok(manifest.permissions.includes('nativeMessaging'));assert.ok(!manifest.permissions.includes('cookies'));const worker=await readFile('browser-companion/extension/worker.js','utf8');assert.ok(!worker.includes('storage.sync'));assert.ok(!worker.includes('console.log'));
@@ -69,7 +78,7 @@ test('sequential authorized tabs/origins, reload, permission revocation and nati
  await mock.message({type:'start'});let s=await detected(mock,1,media+'A','a');
  assert.equal((await mock.message({type:'send',id:s.candidates[0].id})).ok,true);
  await mock.message({type:'disconnect'});assert.equal((await mock.message({type:'state'})).session.candidates.length,1);
- tab={id:2,url:page};assert.equal((await mock.message({type:'state'})).detection,'inactive');await mock.message({type:'start'});
+ tab={id:2,url:page};assert.equal((await mock.message({type:'state'})).detection,'active');await mock.message({type:'start'});
  s=await detected(mock,2,media+'B','b');assert.equal((await mock.message({type:'send',id:s.candidates[0].id})).ok,true);
  tab={id:3,url:'https://other.example.test/watch?keep=1'};assert.equal((await mock.message({type:'state'})).detection,'permission-needed');
  mock.grants.add('https://other.example.test/*');await mock.message({type:'start'});s=await detected(mock,3,media+'C','c');assert.equal(s.candidates.length,1);
@@ -89,23 +98,25 @@ test('permitted frame injection, encrypted playback and child-document navigatio
  const mock=mockChrome(),executed=[];globalThis.chrome=mock.c;
  mock.c.webNavigation.getAllFrames=async()=>[{frameId:0,url:page,documentId:'main'},{frameId:2,url:'https://frame.example.test/player',documentId:'child'}];
  mock.c.scripting.executeScript=async input=>executed.push(input.target.frameIds[0]);
- await import('../browser-companion/extension/worker.js?frames');await mock.message({type:'start'});assert.deepEqual(executed,[0]);
+ await import('../browser-companion/extension/worker.js?frames');await mock.message({type:'start'});assert.ok(executed.length>=1);assert.ok(executed.every(frame=>frame===0));
  assert.deepEqual((await mock.message({type:'state'})).session.missingOrigins,['https://frame.example.test']);
  mock.grants.add('https://frame.example.test/*');await mock.message({type:'scan'});assert.ok(executed.includes(2));
  const inFlight={tabId:1,frameId:2,documentId:'child',requestId:'active-during-unrelated-navigation',timeStamp:Date.now()+1,url:media};mock.c.webRequest.onBeforeRequest.emit(inFlight);mock.c.webNavigation.onBeforeNavigate.emit({tabId:99,frameId:0});mock.c.webRequest.onHeadersReceived.emit({...inFlight,statusCode:200,responseHeaders:[{name:'Content-Type',value:'video/mp4'}]});assert.equal((await mock.message({type:'state'})).session.candidates.length,1);
+ mock.c.webNavigation.onHistoryStateUpdated.emit({tabId:1,frameId:2,url:'https://frame.example.test/next'});assert.equal((await mock.message({type:'state'})).session.candidates.length,0);
  const s=(await mock.message({type:'state'})).session;
  const dom=m=>new Promise(resolve=>mock.c.runtime.onMessage.listeners[0](m,{id:mock.c.runtime.id,tab:{id:1},frameId:2,url:'https://frame.example.test/player',documentId:'child'},resolve));
- await dom({type:'dom',navigationId:s.navigationId,mediaUrl:media,observedAt:Date.now(),width:640,height:360});assert.equal((await mock.message({type:'state'})).session.candidates.length,1);
- await dom({type:'encrypted',navigationId:s.navigationId,mediaUrl:media});const protectedState=(await mock.message({type:'state'})).session;assert.equal(protectedState.candidates[0].drm,true);assert.equal((await mock.message({type:'send',id:protectedState.candidates[0].id})).code,'rejected');
+ await dom({type:'dom',navigationId:s.frameTokens?.[2]??s.navigationId,mediaUrl:media,observedAt:Date.now(),width:640,height:360});assert.equal((await mock.message({type:'state'})).session.candidates.length,1);
+ await dom({type:'encrypted',navigationId:s.frameTokens?.[2]??s.navigationId,mediaUrl:media});const protectedState=(await mock.message({type:'state'})).session;assert.equal(protectedState.candidates[0].drm,true);assert.equal((await mock.message({type:'send',id:protectedState.candidates[0].id})).code,'rejected');
  mock.c.webNavigation.onBeforeNavigate.emit({tabId:1,frameId:2});await dom({type:'dom',navigationId:s.navigationId,mediaUrl:media+'new',observedAt:Date.now()});assert.equal((await mock.message({type:'state'})).session.candidates.length,0);
  await mock.message({type:'scan'});mock.grants.delete('https://frame.example.test/*');mock.c.permissions.onRemoved.emit({origins:['https://frame.example.test/*']});await mock.message({type:'state'});await dom({type:'dom',navigationId:s.navigationId,mediaUrl:media+'revoked',observedAt:Date.now()});assert.equal((await mock.message({type:'state'})).session.candidates.length,0,'Old injected frame messages must be rejected after permission revocation');
  let readHeaders=false;const unrelated={tabId:99,get requestHeaders(){readHeaders=true;throw Error('Unrelated tab headers must not be inspected');}};mock.c.webRequest.onBeforeSendHeaders.emit(unrelated);await mock.message({type:'state'});assert.equal(readHeaders,false);
- mock.c.tabs.onRemoved.emit(1);assert.equal((await mock.message({type:'state'})).session,null);await mock.message({type:'clear'});delete globalThis.chrome;
+ mock.c.tabs.query=async()=>[];mock.c.tabs.onRemoved.emit(1);assert.equal(mock.sessions.sessions[1]?.candidates.length??0,0);await mock.message({type:'clear'});delete globalThis.chrome;
 });
 
-test('expired activation becomes actionable without keeping stale candidates',async()=>{
- const mock=mockChrome();globalThis.chrome=mock.c;await import('../browser-companion/extension/worker.js?expiry');await mock.message({type:'start'});await detected(mock,1,media,'expire');
- mock.sessions.sessions[1].expiresAt=Date.now()-1;const state=await mock.message({type:'state'});assert.equal(state.session,null);assert.equal(state.detection,'expired');await mock.message({type:'start'});assert.equal((await mock.message({type:'state'})).detection,'active');await mock.message({type:'clear'});delete globalThis.chrome;
+test('persistent granted access outlasts old timeout while candidates expire',async()=>{
+ const mock=mockChrome();globalThis.chrome=mock.c;await import('../browser-companion/extension/worker.js?expiry');await detected(mock,1,media,'expire');
+ const now=Date.now,late=Date.now()+TTL+1000;Date.now=()=>late;
+ try{const state=await mock.message({type:'state'});assert.ok(state.session);assert.equal(state.session.candidates.length,0);assert.equal(state.detection,'active');await detected(mock,1,media+'later','late');assert.equal((await mock.message({type:'state'})).session.candidates.length,1);}finally{Date.now=now;await mock.message({type:'clear'});delete globalThis.chrome;}
 });
 
 test('SPA DOM rescan ignores the previous source without suppressing a new source already loaded',()=>{
@@ -115,4 +126,65 @@ test('SPA DOM rescan ignores the previous source without suppressing a new sourc
  globalThis.MutationObserver=class{observe(){}disconnect(){}};
  try{watchMedia('new-navigation',Date.now()+TTL,[media+'A']);assert.deepEqual(sent.map(m=>m.mediaUrl),[media+'B']);}
  finally{globalThis.__clipclipgoDetector?.stop();delete globalThis.__clipclipgoDetector;Object.assign(globalThis,original);}
+});
+
+test('page handoff remains distinct and document-authenticated while XHR/206 discovery continues',async()=>{
+ const mock=mockChrome(),url='https://www.youtube.com/watch?v=irVNGjRFZGk';globalThis.chrome=mock.c;mock.c.tabs.query=async()=>[{id:1,url}];mock.c.webNavigation.getAllFrames=async()=>[{frameId:0,url,documentId:'yt-doc'}];mock.grants.add('https://www.youtube.com/*');await import('../browser-companion/extension/worker.js?routing-layer');await mock.message({type:'start'});
+ const nav=(await mock.message({type:'state'})).session.navigationId;
+ const dom=(payload,doc='yt-doc')=>new Promise(r=>mock.c.runtime.onMessage.listeners[0](payload,{id:mock.c.runtime.id,tab:{id:1},frameId:0,url,documentId:doc},r));
+ await dom({type:'page',navigationId:nav,extractorPageUrl:url},'old-doc');assert.equal((await mock.message({type:'state'})).session.candidates.length,0);
+ await dom({type:'page',navigationId:nav,extractorPageUrl:'https://www.instagram.com/reel/Wrong/'});assert.equal((await mock.message({type:'state'})).session.candidates.length,0);
+ await dom({type:'page',navigationId:nav,extractorPageUrl:url});let state=await mock.message({type:'state'});assert.equal(state.session.candidates[0].mediaType,'page');assert.equal((await mock.message({type:'send',id:state.session.candidates[0].id})).code,'accepted');
+ const d={tabId:1,frameId:0,documentId:'yt-doc',requestId:'xhr',type:'xmlhttprequest',timeStamp:Date.now()+1,url:'https://cdn.test/extensionless?signature=keep%2B',initiator:url};mock.c.webRequest.onBeforeRequest.emit(d);mock.c.webRequest.onHeadersReceived.emit({...d,statusCode:206,responseHeaders:[{name:'Content-Type',value:'video/mp4'}]});state=await mock.message({type:'state'});assert.equal(state.session.candidates.length,2);assert.equal(state.session.candidates[1].mediaType,'direct');assert.equal(state.session.candidates[1].mediaUrl,d.url);await mock.message({type:'clear'});delete globalThis.chrome;
+});
+
+test('popup preview requests are ignored even if a browser supplies an activated tab ID',async()=>{
+ const mock=mockChrome();globalThis.chrome=mock.c;await import('../browser-companion/extension/worker.js?preview-loop');await mock.message({type:'start'});
+ const d={tabId:1,frameId:0,documentId:'main',requestId:'extension-preview',timeStamp:Date.now()+1,url:media,initiator:mock.c.runtime.getURL('popup.html')};mock.c.webRequest.onBeforeRequest.emit(d);mock.c.webRequest.onHeadersReceived.emit({...d,statusCode:206,responseHeaders:[{name:'Content-Type',value:'video/mp4'}]});assert.equal((await mock.message({type:'state'})).session.candidates.length,0);await mock.message({type:'clear'});delete globalThis.chrome;
+});
+
+test('actual grants automatically enable open tabs, navigation and newly granted sites; CDN alone cannot enable a page',async()=>{
+ const mock=mockChrome(),executed=[],stopped=[];globalThis.chrome=mock.c;
+ const tabs=[{id:1,url:page},{id:2,url:page+'&tab=2'},{id:3,url:'https://unpermitted.test/watch'},{id:4,url:page,incognito:true}];
+ mock.c.tabs.query=async options=>options.active?[tabs[0]]:tabs;
+ mock.c.webNavigation.getAllFrames=async({tabId})=>[{frameId:0,url:tabs.find(t=>t.id===tabId)?.url,documentId:'main'}];
+ mock.c.scripting.executeScript=async args=>executed.push(args.target.tabId);
+ mock.c.tabs.sendMessage=async(id,message)=>stopped.push([id,message.type]);
+ await import('../browser-companion/extension/worker.js?persistent-tabs');await mock.message({type:'state'});
+ assert.deepEqual([...new Set(executed)].sort(),[1,2]);assert.equal(mock.sessions.sessions[3],undefined);assert.equal(mock.sessions.sessions[4],undefined);
+ const otherRequest={tabId:3,frameId:0,requestId:'unpermitted-page',timeStamp:Date.now()+1,url:media,initiator:tabs[2].url};
+ mock.c.webRequest.onBeforeRequest.emit(otherRequest);mock.c.webRequest.onHeadersReceived.emit({...otherRequest,statusCode:200,responseHeaders:[{name:'Content-Type',value:'video/mp4'}]});await mock.message({type:'state'});assert.equal(mock.sessions.sessions[3],undefined);
+ mock.grants.add('https://unpermitted.test/*');mock.c.permissions.onAdded.emit({origins:['https://unpermitted.test/*']});await mock.message({type:'state'});assert.ok(mock.sessions.sessions[3]);assert.ok(executed.includes(3),'No reload/start message needed for an already-open permitted tab');
+ tabs[1].url='https://unpermitted.test/second';mock.c.webNavigation.onBeforeNavigate.emit({tabId:2,frameId:0,url:tabs[1].url});mock.c.webNavigation.onCommitted.emit({tabId:2,frameId:0,url:tabs[1].url,documentId:'second'});await mock.message({type:'state'});assert.equal(mock.sessions.sessions[2].pageUrl,tabs[1].url);
+ mock.grants.delete('https://unpermitted.test/*');mock.c.permissions.onRemoved.emit({origins:['https://unpermitted.test/*']});await mock.message({type:'state'});assert.equal(mock.sessions.sessions[2],undefined);assert.equal(mock.sessions.sessions[3],undefined);assert.ok(stopped.some(([id])=>id===3));assert.ok(mock.sessions.sessions[1]);
+ await mock.message({type:'clear'});delete globalThis.chrome;
+});
+
+test('restoration checks actual grants even without permission events and revocation invalidates existing observers',async()=>{
+ const stored=session();addCandidate(stored,data(stored));const mock=mockChrome({sessions:{1:stored,99:{...session(),pageUrl:'https://removed.test/'}}});globalThis.chrome=mock.c;
+ mock.c.webNavigation.getAllFrames=async()=>[{frameId:0,url:page,documentId:'main'}];
+ await import('../browser-companion/extension/worker.js?grant-restoration');const initial=await mock.message({type:'state'});assert.equal(initial.session.candidates.length,1);assert.equal(mock.sessions.sessions[99],undefined);
+ const sender={id:mock.c.runtime.id,tab:{id:1},url:page,frameId:0,documentId:'main'};
+ const content=m=>new Promise(r=>mock.c.runtime.onMessage.listeners[0](m,sender,r));
+ assert.equal((await content({type:'observationAccess',navigationId:initial.session.navigationId})).ok,true);
+ mock.grants.delete('https://page.example.test/*');assert.equal((await content({type:'observationAccess',navigationId:initial.session.navigationId})).ok,false);
+ mock.c.permissions.onRemoved.emit({origins:['https://page.example.test/*']});assert.equal((await mock.message({type:'state'})).session,null);
+ await content({type:'dom',navigationId:initial.session.navigationId,mediaUrl:media+'revoked',observedAt:Date.now()});assert.equal(mock.sessions.sessions[1],undefined);
+ // Simulate temporary activeTab access without any durable host grant.
+ mock.c.permissions.contains=async()=>true;assert.equal((await mock.message({type:'state'})).detection,'permission-needed');
+ await mock.message({type:'clear'});delete globalThis.chrome;
+});
+
+test('revoked CDN access clears candidates/context and old DOM reports cannot restore them',async()=>{
+ const mock=mockChrome();globalThis.chrome=mock.c;mock.c.webNavigation.getAllFrames=async()=>[{frameId:0,url:page,documentId:'main'}];
+ mock.c.storage.local.clear=async()=>assert.fail('Clearing temporary data must preserve theme preferences');
+ await import('../browser-companion/extension/worker.js?revoke-cdn');await detected(mock,1,media,'one');
+ const before=await mock.message({type:'state'});assert.equal(before.session.candidates.length,1);
+ const dom=m=>new Promise(r=>mock.c.runtime.onMessage.listeners[0](m,{id:mock.c.runtime.id,tab:{id:1},frameId:0,url:page,documentId:'main'},r));
+ mock.grants.delete('https://cdn.example.test/*');mock.c.permissions.onRemoved.emit({origins:['https://cdn.example.test/*']});const after=await mock.message({type:'state'});
+ assert.ok(after.session);assert.equal(after.session.candidates.length,0);assert.deepEqual(after.session.requests,{});
+ await dom({type:'dom',navigationId:after.session.navigationId,mediaUrl:media,observedAt:Date.now()});const limited=await mock.message({type:'state'});assert.equal(limited.session.candidates.length,0);assert.ok(limited.session.missingOrigins.includes('https://cdn.example.test'));
+ mock.grants.add('https://cdn.example.test/*');mock.c.permissions.onAdded.emit();await mock.message({type:'state'});
+ await dom({type:'dom',navigationId:after.session.navigationId,mediaUrl:media,observedAt:Date.now()});assert.equal((await mock.message({type:'state'})).session.candidates.length,1);
+ await mock.message({type:'clear'});delete globalThis.chrome;
 });

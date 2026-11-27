@@ -12,7 +12,11 @@ fn session_queue_ownership_inputs_destinations_and_shutdown() {
     core.remember(&input);
     assert!(core.authorize(input.to_str().unwrap()).is_ok());
     let destination = dir.path().join("queued.html");
-    core.inner.lock().unwrap().destinations.insert(destination.clone());
+    core.inner
+        .lock()
+        .unwrap()
+        .destinations
+        .insert(destination.clone());
     assert!(core.destination(destination.to_str().unwrap()).is_ok());
     // Two submitted jobs may name the same destination. The later one must recheck at start.
     fs::write(&destination, "earlier output").unwrap();
@@ -43,26 +47,74 @@ fn session_queue_ownership_inputs_destinations_and_shutdown() {
 #[test]
 fn session_queue_representative_real_engine_and_collision() {
     let (ffmpeg, ffprobe) = crate::bundled::test_sidecars().unwrap();
-    let engines = engine::inspect_engines(ffmpeg, ffprobe, None, &NativeRunner, &Control::default()).unwrap();
+    let engines =
+        engine::inspect_engines(ffmpeg, ffprobe, None, &NativeRunner, &Control::default()).unwrap();
     let dir = test_dir();
     let input = dir.path().join("tone.wav");
-    let mut args = ["-hide_banner", "-nostdin", "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=0.15"].map(String::from).to_vec();
+    let mut args = [
+        "-hide_banner",
+        "-nostdin",
+        "-y",
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=frequency=440:duration=0.15",
+    ]
+    .map(String::from)
+    .to_vec();
     args.push(input.to_string_lossy().into_owned());
-    assert!(NativeRunner.run(&engines.ffmpeg, &args, &Control::default(), Some(Duration::from_secs(15)), None).unwrap().success);
+    assert!(
+        NativeRunner
+            .run(
+                &engines.ffmpeg,
+                &args,
+                &Control::default(),
+                Some(Duration::from_secs(15)),
+                None
+            )
+            .unwrap()
+            .success
+    );
     let core = Arc::new(Core::default());
     let operation = core.reserve().unwrap();
     let media = engine::probe(&engines, &input, &NativeRunner, &operation.control).unwrap();
     let destination = dir.path().join("tone.flac");
-    let output = convert_to(&engines, &input, &destination, OutputFormat::Flac, &media, &operation.control, &NativeRunner, None, || {}).unwrap();
+    let output = convert_to(
+        &engines,
+        &input,
+        &destination,
+        OutputFormat::Flac,
+        &media,
+        &operation.control,
+        &NativeRunner,
+        None,
+        || {},
+    )
+    .unwrap();
     assert!(output.is_file());
     drop(operation);
     let original = fs::read(&output).unwrap();
     let next = core.reserve().unwrap();
-    assert!(convert_to(&engines, &input, &destination, OutputFormat::Flac, &media, &next.control, &NativeRunner, None, || {}).is_err());
+    assert!(convert_to(
+        &engines,
+        &input,
+        &destination,
+        OutputFormat::Flac,
+        &media,
+        &next.control,
+        &NativeRunner,
+        None,
+        || {}
+    )
+    .is_err());
     assert_eq!(fs::read(&output).unwrap(), original);
     drop(next);
     assert!(core.settled());
-    assert!(fs::read_dir(dir.path()).unwrap().all(|entry| !entry.unwrap().file_name().to_string_lossy().starts_with(".clip-clip-go-")));
+    assert!(fs::read_dir(dir.path()).unwrap().all(|entry| !entry
+        .unwrap()
+        .file_name()
+        .to_string_lossy()
+        .starts_with(".clip-clip-go-")));
 }
 
 fn test_dir() -> tempfile::TempDir {
@@ -73,7 +125,10 @@ fn test_dir() -> tempfile::TempDir {
 fn info(video: bool, audio: bool) -> MediaInfo {
     MediaInfo {
         duration: Some(2.0),
-        video_geometry: video.then_some(engine::VideoGeometry{width:160.0,height:96.0}),
+        video_geometry: video.then_some(engine::VideoGeometry {
+            width: 160.0,
+            height: 96.0,
+        }),
         video: video.then(|| engine::StreamInfo {
             index: 2,
             codec: "h264".into(),

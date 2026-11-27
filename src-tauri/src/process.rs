@@ -5,7 +5,7 @@ use std::{
     process::{Child, Command, Stdio},
     sync::{
         atomic::{AtomicBool, Ordering},
-        Mutex,
+        Arc, Mutex,
     },
     thread,
     time::{Duration, Instant},
@@ -84,10 +84,14 @@ pub trait Runner: Send + Sync {
 }
 pub struct NativeRunner;
 
-fn drain(
+fn drain(pipe: impl Read, limit: Option<usize>, handler: Option<LineHandler>) -> (Vec<u8>, bool) {
+    drain_signal(pipe, limit, handler, None)
+}
+fn drain_signal(
     mut pipe: impl Read,
     limit: Option<usize>,
     mut handler: Option<LineHandler>,
+    signal: Option<Arc<AtomicBool>>,
 ) -> (Vec<u8>, bool) {
     let mut captured = Vec::new();
     let mut overflow = false;
@@ -103,6 +107,11 @@ fn drain(
             let room = limit.saturating_sub(captured.len());
             captured.extend_from_slice(&buffer[..count.min(room)]);
             overflow |= count > room;
+            if overflow {
+                if let Some(s) = &signal {
+                    s.store(true, Ordering::SeqCst);
+                }
+            }
         }
         if let Some(handler) = handler.as_mut() {
             for &byte in &buffer[..count] {
@@ -192,7 +201,10 @@ impl Runner for NativeRunner {
         };
         let out_handler = callback(shared.clone());
         let err_handler = callback(shared);
-        let out_reader = thread::spawn(move || drain(stdout, stdout_limit, out_handler));
+        let exceeded = Arc::new(AtomicBool::new(false));
+        let signal = exceeded.clone();
+        let out_reader =
+            thread::spawn(move || drain_signal(stdout, stdout_limit, out_handler, Some(signal)));
         let err_reader = thread::spawn(move || drain(stderr, Some(64 * 1024), err_handler));
         *control.child.lock().unwrap() = Some(child);
         drop(spawn_guard);
@@ -201,6 +213,10 @@ impl Runner for NativeRunner {
             if let Err(error) = control.check() {
                 control.reap();
                 break Err(error);
+            }
+            if exceeded.load(Ordering::SeqCst) {
+                control.reap();
+                break Err("The engine's metadata exceeds the safe inspection limit (2 MiB after reduction). Try another link or report this item; no media-size or duration limit was reached.".into());
             }
             if timeout.is_some_and(|limit| started.elapsed() > limit) {
                 control.reap();
@@ -240,7 +256,7 @@ impl Runner for NativeRunner {
         let (success, exit_code) = outcome?;
         control.check()?;
         if overflow {
-            return Err("The engine returned an unexpectedly large inspection result.".into());
+            return Err("The engine's metadata exceeds the safe inspection limit (2 MiB after reduction). Try another link or report this item; no media-size or duration limit was reached.".into());
         }
         Ok(Captured {
             stdout,
@@ -255,6 +271,53 @@ impl Runner for NativeRunner {
 mod tests {
     use super::*;
     use std::sync::Arc;
+    #[test]
+    #[ignore = "Owned output-overflow child invoked by its parent test"]
+    fn overflowing_child() {
+        use std::io::Write;
+        let _descendant = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "process::tests::waiting_child",
+                "--ignored",
+                "--nocapture",
+            ])
+            .spawn()
+            .unwrap();
+        thread::spawn(|| {
+            for _ in 0..64 {
+                let _ = std::io::stderr().write_all(&[b'e'; 8192]);
+            }
+        });
+        for _ in 0..400 {
+            std::io::stdout().write_all(&[b'x'; 8192]).unwrap();
+        }
+        std::io::stdout().flush().unwrap();
+        thread::sleep(Duration::from_secs(60));
+    }
+    #[test]
+    fn output_overflow_reaps_tree_and_does_not_return_truncated_json() {
+        let c = Control::default();
+        let started = Instant::now();
+        let error = NativeRunner
+            .run(
+                &std::env::current_exe().unwrap(),
+                &[
+                    "--exact".into(),
+                    "process::tests::overflowing_child".into(),
+                    "--ignored".into(),
+                    "--nocapture".into(),
+                ],
+                &c,
+                Some(Duration::from_secs(12)),
+                None,
+            )
+            .err()
+            .unwrap();
+        assert!(error.contains("safe inspection limit"), "{error}");
+        assert!(started.elapsed() < Duration::from_secs(10));
+        assert!(c.child.lock().unwrap().is_none());
+    }
 
     #[test]
     #[ignore = "Child-process fixture invoked explicitly by the parent cancellation test"]

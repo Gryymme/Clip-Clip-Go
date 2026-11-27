@@ -22,7 +22,7 @@ export function sourceChoices(media:DownloadMedia){
  }
  return [...groups.values()].sort((a,b)=>(b.height??0)-(a.height??0)||(b.fps??0)-(a.fps??0));
 }
-export function sourceLabel(f:SourceFormat){return `${f.video?f.height?`${f.height}p`:'Video':'Audio only'}${f.fps?` · ${new Intl.NumberFormat(undefined,{maximumFractionDigits:2}).format(f.fps)} fps`:''}${f.uncertain?' · audio unknown':f.video&&!f.audio?' · video only':''}`;}
+export function sourceLabel(f:SourceFormat){return `${f.video?f.height?`${f.height}p`:'Video':'Audio only'}${f.fps?` · ${new Intl.NumberFormat(undefined,{maximumFractionDigits:2}).format(f.fps)} fps`:''}${f.uncertain?' · audio unknown':''}`;}
 export function bytes(value:number|null){if(value===null||!Number.isFinite(value))return 'Unknown size';if(value<1024)return `${value} B`;const unit=value<1024**2?'KiB':value<1024**3?'MiB':'GiB';const div=unit==='KiB'?1024:unit==='MiB'?1024**2:1024**3;return `${new Intl.NumberFormat(undefined,{maximumFractionDigits:1}).format(value/div)} ${unit}`;}
 export function formatRule(format:string){return contract.containers.find(c=>c.id===format);}
 export function effectiveAudio(s:DownloadSettings,encoders:string[]){return s.audioEncoder==='auto'?formatRule(s.format)?.audio.find(e=>encoders.includes(e)):s.audioEncoder;}

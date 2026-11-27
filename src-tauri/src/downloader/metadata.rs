@@ -1,6 +1,12 @@
 use crate::process::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+// Download jobs re-extract selected format IDs from the original input. They do not
+// consume inspection URLs, fragments, captions or yt-dlp's requested_downloads.
+pub const FORMAT_FIELDS:&str="format_id,ext,vcodec,acodec,width,height,fps,tbr,filesize,filesize_approx,asr,audio_channels,protocol,has_drm";
+pub fn inspection_template() -> String {
+    ["{\"info\":%(.{_type,title,extractor_key,extractor,thumbnail,duration,is_live,live_status,has_drm,",FORMAT_FIELDS,"})j,\"formats\":%(formats.:.{",FORMAT_FIELDS,"})j,\"playlist\":%(entries&true|false)s}"].concat()
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -66,8 +72,34 @@ pub fn codec(s: &str) -> String {
     .to_string()
 }
 pub fn parse(bytes: &[u8], original: &str) -> Result<Media> {
-    let doc: Value = serde_json::from_slice(bytes)
-        .map_err(|_| "The site returned unreadable media information.")?;
+    let mut doc: Value = serde_json::from_slice(bytes)
+        .map_err(|_| "The engine returned malformed inspection metadata. Inspect the link again or report this item.")?;
+    if doc.get("info").is_some() {
+        let playlist = doc["playlist"] == true;
+        let formats = doc
+            .get_mut("formats")
+            .map(Value::take)
+            .unwrap_or(Value::Null);
+        if !formats.is_null() && !formats.is_array() && formats.as_str() != Some("NA") {
+            return Err("The engine returned malformed source formats. Inspect the link again or report this item.".into());
+        }
+        let info = doc
+            .get_mut("info")
+            .map(Value::take)
+            .ok_or("Incomplete inspection metadata.")?;
+        if !info.is_object() {
+            return Err(
+                "The engine returned malformed inspection metadata. Inspect the link again.".into(),
+            );
+        }
+        doc = info;
+        if formats.as_array().is_some_and(|f| !f.is_empty()) {
+            doc["formats"] = formats;
+        }
+        if playlist {
+            doc["entries"] = Value::Array(vec![]);
+        }
+    }
     if doc["_type"].as_str().is_some_and(|t| t != "video") || doc.get("entries").is_some() {
         return Err("Choose one media item. Playlists and channels are not supported.".into());
     }
@@ -86,8 +118,8 @@ pub fn parse(bytes: &[u8], original: &str) -> Result<Media> {
     }
     let raw = doc["formats"]
         .as_array()
-        .cloned()
-        .unwrap_or_else(|| vec![doc.clone()]);
+        .map(Vec::as_slice)
+        .unwrap_or_else(|| std::slice::from_ref(&doc));
     if raw.len() > 2000 {
         return Err("This item has too many source variants to inspect safely.".into());
     }

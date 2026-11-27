@@ -168,7 +168,9 @@ pub fn availability(
         if let Some(codec) = video_codec {
             required.push(codec);
         }
-        if format != OutputFormat::Gif && (!format.video() || media.is_none_or(|m| m.audio.is_some())) {
+        if format != OutputFormat::Gif
+            && (!format.video() || media.is_none_or(|m| m.audio.is_some()))
+        {
             required.push(audio_codec);
         }
         let missing: Vec<_> = required
@@ -245,7 +247,10 @@ pub struct StreamInfo {
     pub codec: String,
 }
 #[derive(Clone, Debug, Serialize)]
-pub struct VideoGeometry { pub width: f64, pub height: f64 }
+pub struct VideoGeometry {
+    pub width: f64,
+    pub height: f64,
+}
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MediaInfo {
@@ -276,7 +281,9 @@ struct ProbeStream {
     side_data_list: Vec<DisplayTransform>,
 }
 #[derive(Deserialize)]
-struct DisplayTransform { rotation: Option<f64> }
+struct DisplayTransform {
+    rotation: Option<f64>,
+}
 #[derive(Deserialize)]
 struct Disposition {
     #[serde(default)]
@@ -305,16 +312,37 @@ pub fn parse_probe(bytes: &[u8]) -> Result<MediaInfo> {
         })
     };
     let video_geometry = actual_video.and_then(|s| {
-        let (w,h)=(f64::from(s.width?),f64::from(s.height?));
+        let (w, h) = (f64::from(s.width?), f64::from(s.height?));
         let sar = match s.sample_aspect_ratio.as_deref() {
             None | Some("N/A" | "0:1") => 1.0,
-            Some(value) => { let (n,d)=value.split_once(':')?; n.parse::<f64>().ok()? / d.parse::<f64>().ok()? }
+            Some(value) => {
+                let (n, d) = value.split_once(':')?;
+                n.parse::<f64>().ok()? / d.parse::<f64>().ok()?
+            }
         };
-        let rotation=s.side_data_list.iter().find_map(|d|d.rotation).unwrap_or(0.0);
-        if w<=0.0 || h<=0.0 || !sar.is_finite() || sar<=0.0 || !rotation.is_finite() || (rotation/90.0-(rotation/90.0).round()).abs()>0.001 { return None; }
-        let (width,height)=if (rotation/90.0).round() as i32 % 2 != 0 {(h,w*sar)} else {(w*sar,h)};
-        if !width.is_finite() || !height.is_finite() {return None;}
-        Some(VideoGeometry{width,height})
+        let rotation = s
+            .side_data_list
+            .iter()
+            .find_map(|d| d.rotation)
+            .unwrap_or(0.0);
+        if w <= 0.0
+            || h <= 0.0
+            || !sar.is_finite()
+            || sar <= 0.0
+            || !rotation.is_finite()
+            || (rotation / 90.0 - (rotation / 90.0).round()).abs() > 0.001
+        {
+            return None;
+        }
+        let (width, height) = if (rotation / 90.0).round() as i32 % 2 != 0 {
+            (h, w * sar)
+        } else {
+            (w * sar, h)
+        };
+        if !width.is_finite() || !height.is_finite() {
+            return None;
+        }
+        Some(VideoGeometry { width, height })
     });
     let video = actual_video.and_then(stream);
     let audio = first_audio.and_then(stream);

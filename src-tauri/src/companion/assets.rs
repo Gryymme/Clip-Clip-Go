@@ -17,6 +17,7 @@ pub const FILES: &[&str] = &[
     "popup.js",
     "popup-state.js",
     "popup-view.js",
+    "preview.js",
     "popup.css",
     "fonts/Montserrat-Variable.ttf",
     "fonts/OFL.txt",

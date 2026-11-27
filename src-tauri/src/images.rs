@@ -275,7 +275,10 @@ pub fn decode(path: &Path, control: &Control) -> Result<Decoded> {
     if &magic[4..8] == b"ftyp" {
         return heic::decode(path, &mut reader, metadata.len(), control);
     }
-    if path.extension().is_some_and(|s| s.eq_ignore_ascii_case("heic")) {
+    if path
+        .extension()
+        .is_some_and(|s| s.eq_ignore_ascii_case("heic"))
+    {
         return Err(heic::CORRUPT.into());
     }
     if magic.starts_with(b"BA") {
@@ -409,7 +412,9 @@ pub fn convert_to(
     staged.publish()
 }
 fn validate_output(info: &ImageInfo, format: OutputFormat, dimensions: (u32, u32)) -> Result<()> {
-    if info.format != format.extension() || (info.width, info.height) != dimensions || info.orientation_applied
+    if info.format != format.extension()
+        || (info.width, info.height) != dimensions
+        || info.orientation_applied
     {
         return Err(
             "Encoded image format or dimensions did not match. No destination file was published."
@@ -419,6 +424,6 @@ fn validate_output(info: &ImageInfo, format: OutputFormat, dimensions: (u32, u32
     Ok(())
 }
 
+mod heic;
 #[cfg(test)]
 mod tests;
-mod heic;

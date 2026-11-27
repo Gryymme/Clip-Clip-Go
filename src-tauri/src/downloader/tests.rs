@@ -5,30 +5,67 @@ fn session_queue_download_snapshot_survives_later_inspection_and_folder_changes(
     let work = dir();
     let runtime = Runtime::default();
     runtime.inner.lock().unwrap().folder = Some(work.path().to_owned());
-    let inspected = Inspected { id:1, input:MediaInput::Page("https://media.example.test/item?signature=private".into()), media:metadata() };
+    let inspected = Inspected {
+        id: 1,
+        input: MediaInput::Page("https://media.example.test/item?signature=private".into()),
+        media: metadata(),
+    };
     let original = settings();
-    let prepared = runtime.prepare_snapshot(inspected.clone(), original.clone(), "first".into()).unwrap();
+    let prepared = runtime
+        .prepare_snapshot(inspected.clone(), original.clone(), "first".into())
+        .unwrap();
     let ticket = prepared["ticket"].as_u64().unwrap();
     assert!(!prepared.to_string().contains("signature"));
     assert!(!prepared.to_string().contains("private"));
     {
         let mut inner = runtime.inner.lock().unwrap();
         inner.folder = Some(work.path().join("later"));
-        inner.inspected = Some(Inspected { id:2, input:MediaInput::Page("https://media.example.test/other".into()), media:metadata() });
+        inner.inspected = Some(Inspected {
+            id: 2,
+            input: MediaInput::Page("https://media.example.test/other".into()),
+            media: metadata(),
+        });
         inner.job = Some(Job::new(2, "ready", "new inspection"));
     }
-    let saved = runtime.inner.lock().unwrap().prepared.remove(&ticket).unwrap();
+    let saved = runtime
+        .inner
+        .lock()
+        .unwrap()
+        .prepared
+        .remove(&ticket)
+        .unwrap();
     assert_eq!(saved.inspected.id, 1);
     assert_eq!(saved.inspected.input.url(), inspected.input.url());
     assert_eq!(saved.folder, work.path());
     assert_eq!(saved.name, "first");
     assert_eq!(saved.settings.video_source, original.video_source);
-    assert!(runtime.inner.lock().unwrap().prepared.remove(&ticket).is_none());
+    assert!(runtime
+        .inner
+        .lock()
+        .unwrap()
+        .prepared
+        .remove(&ticket)
+        .is_none());
     let execution = Runtime::default();
     execution.inner.lock().unwrap().job = Some(Job::new(3, "downloading", "output"));
-    runtime.inner.lock().unwrap().executions.insert(3, execution.clone());
+    runtime
+        .inner
+        .lock()
+        .unwrap()
+        .executions
+        .insert(3, execution.clone());
     runtime.stage(2, "inspecting", "another inspection");
-    assert_eq!(execution.inner.lock().unwrap().job.as_ref().unwrap().message, "output");
+    assert_eq!(
+        execution
+            .inner
+            .lock()
+            .unwrap()
+            .job
+            .as_ref()
+            .unwrap()
+            .message,
+        "output"
+    );
 }
 mod browser;
 mod pipeline;
@@ -55,6 +92,22 @@ fn metadata() -> Media {
     metadata::parse(br#"{"title":"Fixture","duration":4,"formats":[{"format_id":"v","ext":"mp4","vcodec":"avc1.64001f","acodec":"none","width":960,"height":540,"fps":29.97,"tbr":900},{"format_id":"a","ext":"m4a","vcodec":"none","acodec":"mp4a.40.2","asr":48000,"audio_channels":2,"tbr":128},{"format_id":"lower","ext":"mp4","vcodec":"h264","acodec":"aac","width":640,"height":360,"fps":24,"tbr":500}]}"#,"https://media.example.test/item").unwrap()
 }
 
+#[test]
+fn browser_extractor_routes_to_selected_item_without_referer_relay() {
+    let mut c = crate::companion::shared::tests::candidate();
+    let selected = "https://www.youtube.com/shorts/irVNGjRFZGk?feature=share";
+    c.media_type = "page".into();
+    c.media_url.clear();
+    c.extractor_page_url = Some(selected.into());
+    c.frame_url = selected.into();
+    c.context.referer = None;
+    c.validate(crate::companion::shared::now()).unwrap();
+    let input = MediaInput::Browser(c);
+    assert_eq!(input.url(), selected);
+    let (url, relay) = input.transport().unwrap();
+    assert_eq!(url, selected);
+    assert!(relay.is_none());
+}
 #[test]
 fn incomplete_metadata_summary_distinguishes_unknown_from_confirmed_encoding() {
     let e = engines();
@@ -1093,7 +1146,8 @@ fn website_inspection_keeps_complete_urls_as_one_argument_without_extractor_rest
         let args = inspection_args(&t, &e, Path::new("owned scratch"), &validated);
         assert_eq!(&args[args.len() - 2..], &["--", input]);
         assert!(args.iter().any(|arg| arg == "--skip-download"));
-        assert!(args.iter().any(|arg| arg == "--dump-single-json"));
+        assert!(args.iter().any(|arg| arg == "--print"));
+        assert!(!args.iter().any(|arg| arg == "--dump-single-json"));
         for restricted in ["--force-generic-extractor", "--use-extractors", "--ies"] {
             assert!(!args.iter().any(|arg| arg == restricted));
         }
@@ -1256,4 +1310,67 @@ fn throttled_two_sources_keep_selected_ids_and_emit_live_progress_before_merge()
         runtime.inner.lock().unwrap().job.as_ref().unwrap().stage,
         "succeeded"
     );
+}
+
+#[test]
+fn compact_inspection_projects_verbose_single_video_without_losing_formats() {
+    let d = dir();
+    let t = tools_at(
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("binaries"),
+        true,
+    )
+    .unwrap();
+    let fragments=(0..1200).map(|n|json!({"url":format!("https://cdn.example.test/segment-{n}?signature={}","signed".repeat(60)),"duration":1.8})).collect::<Vec<_>>();
+    let formats=(0..16).map(|n|json!({"format_id":format!("v{n}"),"ext":"mp4","url":"http://127.0.0.1:9/not-downloaded","vcodec":"h264","acodec":"aac","protocol":"http_dash_segments","width":2560,"height":([1440,1080,720,480][n%4]),"fps":(if n%2==0{60}else{30}),"tbr":(33000/(1+n%4)),"fragments":fragments,"filesize_approx":9_000_000_000u64})).collect::<Vec<_>>();
+    let raw=serde_json::to_vec(&json!({"id":"fixture","title":"36-minute 1440p60 fixture","duration":2160,"extractor":"generic","webpage_url":"http://127.0.0.1:9/watch?v=fixture&list=ignored","formats":formats,"thumbnails":[{"url":"https://cdn.example.test/poster.jpg"}],"subtitles":{"en":[{"url":"https://cdn.example.test/captions"}]}})).unwrap();
+    assert!(raw.len() > 2 * 1024 * 1024);
+    let info = d.path().join("verbose.info.json");
+    fs::write(&info, &raw).unwrap();
+    let args = vec![
+        "--ignore-config".into(),
+        "--no-plugin-dirs".into(),
+        "--skip-download".into(),
+        "--no-check-formats".into(),
+        "--load-info-json".into(),
+        info.to_string_lossy().into_owned(),
+        "--print".into(),
+        metadata::inspection_template(),
+    ];
+    let out = NativeRunner
+        .run(
+            &t.yt,
+            &args,
+            &Control::default(),
+            Some(Duration::from_secs(25)),
+            None,
+        )
+        .unwrap();
+    assert!(out.success, "{}", out.stderr);
+    assert!(out.stdout.len() < 32 * 1024);
+    let media = metadata::parse(&out.stdout, "https://example.test/watch").unwrap();
+    assert_eq!(media.formats.len(), 16);
+    assert_eq!(
+        media
+            .formats
+            .iter()
+            .map(|f| f.id.clone())
+            .collect::<std::collections::BTreeSet<_>>(),
+        (0..16).map(|n| format!("v{n}")).collect()
+    );
+    for h in [1440, 1080, 720, 480] {
+        assert!(media.formats.iter().any(|f| f.height == Some(h)));
+    }
+    assert_eq!(media.duration, Some(2160.0));
+    assert_eq!(
+        media.formats.iter().find(|f| f.id == "v0").unwrap().height,
+        Some(1440)
+    );
+    assert_eq!(
+        media.formats.iter().find(|f| f.id == "v0").unwrap().fps,
+        Some(60.0)
+    );
+    assert_eq!(media.formats[0].size, Some(9_000_000_000));
+    assert!(media.formats[0].audio);
+    assert!(metadata::parse(b"{truncated", "https://example.test").is_err());
+    assert!(metadata::parse(br#"{"info":null}"#, "https://example.test").is_err());
 }

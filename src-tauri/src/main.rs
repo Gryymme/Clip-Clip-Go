@@ -1,21 +1,21 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod history;
-mod session;
 mod bundled;
 mod companion;
 mod conversion;
 mod downloader;
 mod engine;
-mod gif;
 #[path = "../engine_integrity.rs"]
 mod engine_integrity;
+mod gif;
+mod history;
 mod images;
 mod media;
 mod pdf;
 mod preview;
 mod process;
 mod process_tree;
+mod session;
 mod text;
 
 fn main() {
