@@ -116,3 +116,18 @@ summary{transition:color var(--motion-fast)}summary:hover{color:var(--accent)}
 .current-tab{font-size:1rem}
 
 #result,#settings-result,#stream,#protected{font-size:1rem;color:var(--text)}
+
+.brand-row{flex-wrap:nowrap;gap:7px}.brand-row h1{font-size:20px;flex:none}.header-controls{display:flex;align-items:center;gap:8px;margin-left:auto;padding-left:14px;flex:none}.brand-row .icon-button{margin-left:0}
+.brand-logo{display:block;width:24px;height:24px;flex:0 0 24px;background:url('./icons/logo-dark.svg') center/contain no-repeat}
+:root[data-theme=light] .brand-logo{background-image:url('./icons/logo-light.svg')}
+#connect{background:transparent;color:var(--text);white-space:nowrap;padding-inline:9px;font-size:.875rem;display:inline-flex;align-items:center;gap:6px}
+#connect[data-connected=true]::before{content:'';width:7px;height:7px;border-radius:50%;background:#16a34a;flex:none}
+#connect:disabled{background:var(--surface);color:var(--secondary)}
+#connect:enabled:hover{background:#4285f4;color:white}#connect[data-connected=true]:enabled:hover{background:#b91c1c;border-color:#b91c1c;color:white}
+.current-tab{margin-bottom:26px}
+.settings-connection{padding-bottom:16px;border-bottom:1px solid var(--line)}
+button{--hover-lift:-1px;transition:background-color var(--motion-fast),border-color var(--motion-fast),color var(--motion-fast),transform var(--motion-fast)}
+@media(hover:hover) and (pointer:fine) and (prefers-reduced-motion:no-preference){button:enabled:hover{transform:translateY(var(--hover-lift))}button:enabled:active{transform:scale(.97)}}
+@media(hover:none){button:enabled:hover{transform:none}}
+
+@media(prefers-reduced-motion:no-preference){:root.theme-changing,:root.theme-changing *,:root.theme-changing *::before,:root.theme-changing *::after{transition:background-color 150ms ease,color 150ms ease,border-color 150ms ease,outline-color 150ms ease,fill 150ms ease,stroke 150ms ease}}

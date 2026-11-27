@@ -2,7 +2,7 @@ export function grantDescription(pattern){
   return pattern==='<all_urls>'?'All websites (broad access)':pattern.includes('*')&& !/^https?:\/\/[^*]+\/\*$/.test(pattern)?`${pattern} · wildcard grant; may cover multiple sites`:pattern;
 }
 export function setupSettings({doc=document,api=chrome,onOpen=()=>{},onClose=()=>{},onChange=async()=>{}}={}){
-  const $=id=>doc.getElementById(id),dialog=$('settings-dialog');let previousFocus=null,signature='',loading=false;
+  const $=id=>doc.getElementById(id),dialog=$('settings-dialog');let previousFocus=null,signature='',loading=false;let themeTimer;
   const note=text=>{$('settings-result').textContent=text;};
   async function update(){
     if(loading)return;loading=true;
@@ -24,8 +24,8 @@ export function setupSettings({doc=document,api=chrome,onOpen=()=>{},onClose=()=
   $('settings-open').onclick=open;$('settings-close').onclick=close;
   $('browser-permissions').onclick=()=>{void api.tabs.create({url:`chrome://extensions/?id=${api.runtime.id}`});};
   $('theme').value=doc.documentElement.dataset.theme||'dark';
-  $('theme').onchange=async()=>{const theme=$('theme').value;if(!['light','dark'].includes(theme))return;try{await api.storage.local.set({theme});doc.documentElement.dataset.theme=theme;}catch{note('Theme could not be saved. Try again.');}};
+  $('theme').onchange=async()=>{const theme=$('theme').value;if(!['light','dark'].includes(theme))return;try{await api.storage.local.set({theme});const root=doc.documentElement;if(root.dataset.theme!==theme){root.classList?.add('theme-changing');void root.offsetWidth;clearTimeout(themeTimer);themeTimer=setTimeout(()=>root.classList?.remove('theme-changing'),180);}root.dataset.theme=theme;}catch{note('Theme could not be saved. Try again.');}};
   const permissionsChanged=()=>{signature='';void update();void onChange().catch(()=>note('Access changed. Reopen the popup if discovery has not refreshed.'));};
   api.permissions.onAdded.addListener(permissionsChanged);api.permissions.onRemoved.addListener(permissionsChanged);
-  return {open,update,dispose(){api.permissions.onAdded.removeListener(permissionsChanged);api.permissions.onRemoved.removeListener(permissionsChanged);}};
+  return {open,update,dispose(){clearTimeout(themeTimer);api.permissions.onAdded.removeListener(permissionsChanged);api.permissions.onRemoved.removeListener(permissionsChanged);}};
 }

@@ -59,11 +59,11 @@ test('actual popup uses one Allow/Rescan action, verified pill and collapsed res
  const state={ok:true,detection:'permission-needed',session:null,connection:{ok:false,code:'unknown'},tab:{id:1,host:'page.test',origin:'https://page.test'}};
  f.doc.addEventListener=()=>{};const api=f.api;api.tabs.query=async()=>[{id:1,url:'https://page.test/'}];api.runtime.getManifest=()=>({version:'0.5.0'});
  api.permissions.request=async args=>{calls.push(args);return true;};api.webNavigation={onBeforeNavigate:event(),onHistoryStateUpdated:event()};
- api.runtime.sendMessage=async message=>{calls.push(message);if(message.type==='state')return structuredClone(state);if(message.type==='start'){state.detection='active';state.session={candidates:[]};}return {ok:true};};
+ api.runtime.sendMessage=async message=>{calls.push(message);if(message.type==='state')return structuredClone(state);if(message.type==='disconnect')state.connection={ok:false,code:'disconnected'};if(message.type==='start'){state.detection='active';state.session={candidates:[]};}return {ok:true};};
  Object.assign(globalThis,{chrome:api,document:f.doc,window:{addEventListener(){}},setInterval:fn=>{refresh=fn;return 1;},clearInterval(){}});
  try{await import('../browser-companion/extension/popup.js?acceptance');assert.equal(f.$('discovery-action').textContent,'Allow');await f.$('discovery-action').onclick();assert.ok(calls.some(c=>c.type==='start'));assert.equal(f.$('discovery-action').textContent,'Rescan');assert.doesNotMatch(f.$('hint').textContent,/Allow this site/);
   await f.$('discovery-action').onclick();assert.ok(calls.some(c=>c.type==='scan'));assert.match(f.$('rescan-note').textContent,/Rescanned permitted frames/);assert.ok(!f.$('result').textContent?.includes('Rescanned'));
-  state.connection={ok:true,code:'unknown',extensionId:'saved'};await refresh();assert.equal(f.$('connection').textContent,'Not Connected');
-  state.connection={ok:true,code:'connected'};await refresh();assert.equal(f.$('connection').textContent,'Connected');assert.equal(f.$('disconnect').hidden,false);assert.equal(f.$('connect').hidden,true);
+  state.connection={ok:true,code:'unknown',extensionId:'saved'};await refresh();assert.equal(f.$('connect').textContent,'Connect');
+  state.connection={ok:true,code:'connected'};await refresh();assert.equal(f.$('connect').textContent,'Connected');assert.equal(f.$('disconnect').hidden,false);assert.equal(f.$('connect').hidden,false);await f.$('connect').onclick();assert.ok(calls.some(c=>c.type==='disconnect'));assert.equal(f.$('connect').textContent,'Connect');
  }finally{Object.assign(globalThis,saved);}
 });

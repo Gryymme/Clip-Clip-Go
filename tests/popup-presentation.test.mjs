@@ -3,6 +3,12 @@ import assert from 'node:assert/strict';
 import {readFile,readdir} from 'node:fs/promises';
 import path from 'node:path';
 const source=path.resolve('browser-companion/extension');
+
+test('theme logo variants preserve master geometry without changing toolbar assets',async()=>{
+ const master=await readFile('src-tauri/icons/app.svg','utf8'),dark=await readFile(path.join(source,'icons/logo-dark.svg'),'utf8'),light=await readFile(path.join(source,'icons/logo-light.svg'),'utf8');
+ assert.equal(dark,master);assert.equal(light,master.replaceAll('#FFFFFF','#000000').replaceAll('#ffffff','#000000').replaceAll('fill="white"','fill="#000000"'));
+ const html=await readFile(path.join(source,'popup.html'),'utf8');assert.ok(!html.includes('id="connection"'));assert.ok(html.indexOf('id="connect"')<html.indexOf('id="settings-open"'));assert.ok(html.indexOf('ClipClipGO App &amp; Extension Connection')<html.indexOf('id="disconnect"'));
+});
 test('actual popup document establishes fixed size and local variable font for controls',async()=>{
  const manifest=JSON.parse(await readFile(path.join(source,'manifest.json'))),html=await readFile(path.join(source,manifest.action.default_popup),'utf8');
  const stylesheet=html.match(/rel="stylesheet" href="([^"]+)"/)[1],css=await readFile(path.resolve(source,stylesheet),'utf8');
