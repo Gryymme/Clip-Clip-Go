@@ -7,7 +7,7 @@ export function detectionView(state) {
     inactive:'Checking website access...',
     navigating:'Waiting for the new page...',
     partial:'Some permitted frames could not be inspected. Try Rescan after the player loads.',
-    active:'Start playback, or rescan an already loaded player.'
+    active:'Missing a video? Click Rescan.'
   };
   return {message:messages[state.detection]||messages.inactive,action:'Allow',disabled:state.detection==='navigating'};
 }

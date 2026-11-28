@@ -131,3 +131,13 @@ button{--hover-lift:-1px;transition:background-color var(--motion-fast),border-c
 @media(hover:none){button:enabled:hover{transform:none}}
 
 @media(prefers-reduced-motion:no-preference){:root.theme-changing,:root.theme-changing *,:root.theme-changing *::before,:root.theme-changing *::after{transition:background-color 150ms ease,color 150ms ease,border-color 150ms ease,outline-color 150ms ease,fill 150ms ease,stroke 150ms ease}}
+
+.brand-logo{width:44px;height:44px;flex-basis:44px}
+.candidate{position:relative;grid-template-columns:88px minmax(0,1fr)}
+.candidate-radio{position:absolute;width:1px;height:1px;opacity:0;clip-path:inset(50%);margin:0}
+.candidate:has(input:focus-visible){outline:3px dashed var(--focus);outline-offset:2px}
+:is(#settings-open,#browser-permissions,#copy-diagnostics,#allow,#discovery-action):enabled:hover{background:#4285f4;border-color:#4285f4;color:#fff}
+#result:not(:empty),#settings-result:not(:empty),#diagnostic-status:not(:empty){padding:12px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface)}
+#result:empty,#settings-result:empty,#diagnostic-status:empty{display:none}
+button.inline-disclosure{display:inline;padding:0 2px;min-height:0;border:0;background:transparent;color:#4285f4;font:inherit;text-decoration:underline;text-underline-offset:3px}
+button.inline-disclosure:enabled:hover{background:transparent;color:var(--focus)}

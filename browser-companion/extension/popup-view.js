@@ -4,11 +4,11 @@ export function renderCandidates(root, candidates, selected, choose, doc = docum
   root.replaceChildren();
   for (const c of candidates) {
     const info = candidateLabel(c), row = doc.createElement('div'), radio = doc.createElement('input'), text = doc.createElement('label'),poster=doc.createElement('div'),fallback=doc.createElement('span');
-    row.className = 'candidate'; radio.type = 'radio'; radio.name = 'candidate'; radio.value = c.id; radio.checked = selected === c.id;radio.disabled=c.drm===true;
+    row.className = 'candidate';radio.className='candidate-radio'; radio.type = 'radio'; radio.name = 'candidate'; radio.value = c.id; radio.checked = selected === c.id;radio.disabled=c.drm===true;
     radio.addEventListener('change', () => choose(c.id));
     radio.id='candidate-'+c.id;text.htmlFor=radio.id;poster.className='candidate-poster';fallback.className='poster-fallback';fallback.textContent='▶';fallback.setAttribute?.('aria-hidden','true');poster.append(fallback);enhance(poster,c);
     for (const [tag, value] of [['strong', info.title], ['small', info.host], ['small', info.detail]]) { const el = doc.createElement(tag); el.textContent = value; el.dir = 'auto'; text.append(el); }
-    row.append(radio,poster,text); root.append(row);
+    row.append(radio,poster,text);row.addEventListener('click',event=>{if(!radio.disabled&&event.target!==radio&&!event.target.closest?.('label')){radio.click();radio.focus?.();}});root.append(row);
     if(radio.value===focused)restore=radio;
   }
   restore?.focus?.();

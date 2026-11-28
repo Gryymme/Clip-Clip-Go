@@ -18,6 +18,18 @@ try{
  const {default:Source}=await server.ssrLoadModule('/src/companion/BrowserSource.tsx');
  const {initialCompanion}=await server.ssrLoadModule('/src/companion/types.ts');
  const snapshots=[];
+ const {default:ImagesToPdf}=await server.ssrLoadModule('/src/converter/ImagesToPdf.tsx');
+ const {initialSize,sizeError}=await server.ssrLoadModule('/src/converter/pageSize.ts');
+ for(const [name,pageSize,customSize]of [['Image sized invalid inactive','image',{...initialSize,width:NaN,unit:'px',dpi:'0'}],['Custom default valid','custom',initialSize],['Custom width invalid','custom',{...initialSize,width:72}],['Custom DPI invalid','custom',{...initialSize,unit:'px',dpi:'0'}]]){
+  const conversion={images:[],customSize,pageSize,pageSizeError:pageSize==='custom'?sizeError(customSize):null,busy:false,job:null};const markup=render(h(ImagesToPdf,{conversion,selecting:false}));
+  assert.ok(!markup.includes('Each side must exceed'));
+  if(name.includes('inactive')){assert.ok(!markup.includes('id="custom-width"'));assert.ok(!markup.includes('custom-dpi-error'));}
+  if(name==='Custom default valid')assert.ok(!markup.includes('aria-invalid="true"'));
+  if(name==='Custom width invalid'){assert.ok(markup.includes('id="custom-width-error"'));assert.ok(!markup.includes('id="custom-height-error"'));}
+  if(name==='Custom DPI invalid')assert.ok(markup.includes('id="custom-dpi-error"'));
+  snapshots.push([name,markup]);
+ }
+
  const {default:Downloader}=await server.ssrLoadModule('/src/downloader/Downloader.tsx');
  const {initialSettings}=await server.ssrLoadModule('/src/downloader/model.ts');
  for(const phase of ['connected','waiting','unavailable']){

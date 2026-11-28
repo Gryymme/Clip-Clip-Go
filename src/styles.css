@@ -349,3 +349,5 @@ summary,a{transition:color var(--motion-fast),background-color var(--motion-fast
 @media(hover:hover) and (pointer:fine) and (prefers-reduced-motion:no-preference){.setup-dialog-heading button:enabled:hover{transform:translateY(-1px)}.setup-dialog-heading button:enabled:active{transform:scale(.97)}}
 
 @media(prefers-reduced-motion:no-preference){:root.theme-changing,:root.theme-changing *,:root.theme-changing *::before,:root.theme-changing *::after{transition:background-color 150ms ease,color 150ms ease,border-color 150ms ease,outline-color 150ms ease,fill 150ms ease,stroke 150ms ease}}
+
+.file-preview{border-radius:var(--radius-control);overflow:hidden}.file-preview img{border-radius:inherit}

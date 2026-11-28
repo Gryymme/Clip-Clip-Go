@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {initialPageSize,initialSize,unitFactor,displayDimension,changeUnit,changeDpi,editDimension,sizePayload,sizeError} from '../src/converter/pageSize.ts';
+import {initialPageSize,initialSize,unitFactor,displayDimension,changeUnit,changeDpi,editDimension,sizePayload,sizeError,customSizeErrors} from '../src/converter/pageSize.ts';
 import {insideDrop,dropError} from '../src/converter/drop.ts';
 import {appendDroppedImages} from '../src/converter/pdf.ts';
 const near=(a,b)=>assert.ok(Math.abs(a-b)<1e-8,`${a} != ${b}`);
@@ -25,7 +25,7 @@ test('custom units use correct physical conversions and repeated switches never 
 });
 test('custom dimensions validate finite bounds, DPI, positive area inside margins and incomplete input',()=>{
  for(const n of [0,-1,NaN,Infinity,71,14401])assert.ok(sizeError({...initialSize,width:n}));
- assert.match(sizeError({...initialSize,width:72}),/margins/);
+ assert.match(sizeError({...initialSize,width:72}),/exceed 1 inch \/ 2.54 cm/);
  for(const dpi of ['','0','-2','Infinity','2401'])assert.ok(sizeError({...initialSize,unit:'px',dpi}));
  assert.equal(sizeError({...initialSize,unit:'px',dpi:'96'}),null);
  assert.equal(sizeError({...initialSize,width:14400,height:73}),null);
@@ -45,4 +45,14 @@ test('dropped images append in delivered order, deduplicate, report rejected/ove
  assert.deepEqual(appendDroppedImages([a],[b],true).files,[a]);
  const heic={name:'IMG_20250914_183022_portrait_edited_edited.HEIC',path:'C:/camera.HEIC',sizeBytes:'4096'};
  assert.deepEqual(appendDroppedImages([a],[heic]).files,[a,heic]);
+});
+
+test('field-specific inch/cm/pixel errors apply only to Custom and keep valid boundaries',()=>{
+ assert.deepEqual(customSizeErrors(initialSize),{});
+ for(const mode of ['image','a4','letter','legal'])assert.deepEqual(customSizeErrors({...initialSize,width:NaN,unit:'px',dpi:'0'},mode),{});
+ for(const [unit,min,max]of [['in','1','200'],['cm','2.54','508']]){
+  let s=changeUnit(initialSize,unit);assert.ok(customSizeErrors(editDimension(s,'width',min)).width);assert.deepEqual(customSizeErrors(editDimension(s,'width',max)),{});assert.ok(customSizeErrors(editDimension(s,'height',String(Number(max)+.01))).height);
+ }
+ for(const dpi of ['1','2400'])assert.deepEqual(customSizeErrors({...initialSize,unit:'px',dpi}),{});
+ assert.deepEqual(Object.keys(customSizeErrors({...initialSize,unit:'px',dpi:'0'})),['dpi']);
 });

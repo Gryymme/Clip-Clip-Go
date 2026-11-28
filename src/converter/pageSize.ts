@@ -6,13 +6,18 @@ export const initialSize = {width:612,height:792,unit:'in' as Unit,dpi:'96',widt
 export type CustomSize = typeof initialSize;
 export function unitFactor(unit:Unit,dpi:number){return unit==='in'?72:unit==='cm'?72/2.54:72/dpi;}
 export function displayDimension(points:number,unit:Unit,dpi:number){return Number((points/unitFactor(unit,dpi)).toPrecision(12)).toString();}
-export function sizeError(s:CustomSize):string|null {
- const dpi=Number(s.dpi);
- if(s.unit==='px'&&(!Number.isFinite(dpi)||dpi<1||dpi>2400))return 'DPI must be between 1 and 2400.';
- if(![s.width,s.height].every(v=>Number.isFinite(v)&&v>=72&&v<=14400))return 'Page dimensions must be finite and between 1 and 200 inches (72–14,400 points).';
- if(s.width<=72||s.height<=72)return 'Page dimensions must exceed 1 inch to leave usable space inside the 0.5-inch margins.';
- return null;
+export function customSizeErrors(s:CustomSize,mode:PageSize='custom'):Partial<Record<'width'|'height'|'dpi',string>> {
+ if(mode!=='custom')return {};
+ const errors:Partial<Record<'width'|'height'|'dpi',string>>={},dpi=Number(s.dpi);
+ if(s.unit==='px'&&(!Number.isFinite(dpi)||dpi<1||dpi>2400)){errors.dpi='DPI must be between 1 and 2400 for pixel dimensions.';return errors;}
+ for(const axis of ['width','height'] as const){const name=axis==='width'?'Width':'Height',value=s[axis];
+  if(!Number.isFinite(value))errors[axis]=name+' must be a finite number.';
+  else if(value<=72)errors[axis]=name+' must exceed 1 inch / 2.54 cm.';
+  else if(value>14400)errors[axis]=name+' must be at most 200 inches / 508 cm.';
+ }
+ return errors;
 }
+export function sizeError(s:CustomSize):string|null {return Object.values(customSizeErrors(s))[0]??null;}
 export function editDimension(s:CustomSize,axis:'width'|'height',value:string):CustomSize {
  const n=value.trim()?Number(value):NaN;
  return {...s,[axis]:n*unitFactor(s.unit,Number(s.dpi)),[axis+'Draft']:value};

@@ -77,10 +77,9 @@ test('UI output groups exactly match route rules and preserve audio extraction g
   assert.deepEqual(inputGroups.flatMap(group => group.extensions).sort(), [...inputExtensions].sort());
 });
 
-test('contextual PDF notes explain reconstruction, OCR and page rendering', () => {
+test('redundant reconstruction helpers are absent while PDF rendering notes remain', () => {
   for (const format of ['txt','md','html']) {
-    assert.match(outputHelp('pdf',format),/Reconstructed text/);
-    assert.match(outputHelp('pdf',format),/OCR/);
+    assert.equal(outputHelp('pdf',format),'');
   }
   for (const format of ['png','jpg']) assert.match(outputHelp('pdf',format),/150 DPI/);
   for (const name of ['report.doc','report.docx','report.odt','sheet.xlsx','slides.pptx','notes.rtf','sheet.ods','slides.odp']) assert.equal(identifyFile(name),null);

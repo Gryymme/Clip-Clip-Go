@@ -80,16 +80,16 @@ export function outputGroups(input: InputFormat): { label: string; formats: read
 }
 
 export function outputHelp(input: InputFormat, output: OutputFormat): string {
-  if (output === 'gif') return 'Animated GIF with no audio. Loops continuously. Long or high-resolution clips can produce large files.';
+  if (output === 'gif') return '';
   if (isTextInput(input)) return output === 'pdf' ? 'Paginated A4 PDF with an embedded font. Latin, Greek and Cyrillic text are supported where the font has glyphs; complex scripts, combining sequences and missing glyphs produce an error.' : 'Local UTF-8 output. Basic structure is preserved where supported; formatting may change.';
   if (input === 'pdf') {
     return output === 'png' || output === 'jpg'
       ? 'One image per selected page at 150 DPI, in a new output folder. JPEG uses a white background.'
-      : 'Reconstructed text with page boundaries. Original styling, exact tables and perfect reading order are not preserved. Scanned PDFs need OCR, which is not supported.';
+      : '';
   }
-  if (inputRules[input].category === 'video') return 'Choose a video format or extract audio from the video.';
-  if (inputRules[input].category === 'audio') return 'Choose an audio output format.';
+  if (inputRules[input].category === 'video') return '';
+  if (inputRules[input].category === 'audio') return '';
   if (input === 'heic') return 'Uses the primary still image, including HEIF rotation and mirroring. 8-bit SDR HEVC only; HDR, wide-gamut/ICC, alpha/gain maps and sequences are unsupported.';
-  if (inputRules[input].category === 'image') return 'Convert one still image. Dimensions are preserved after applying EXIF orientation.';
-  return 'Choose an output format.';
+  if (inputRules[input].category === 'image') return '';
+  return '';
 }

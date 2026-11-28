@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ClipClipGO Companion",
-  "version": "0.5.5",
+  "version": "0.5.6",
   "minimum_chrome_version": "120",
   "description": "Find media on sites you permit and send a selected source to ClipClipGO.",
   "permissions": ["activeTab", "scripting", "webRequest", "webNavigation", "storage", "alarms", "nativeMessaging"],
