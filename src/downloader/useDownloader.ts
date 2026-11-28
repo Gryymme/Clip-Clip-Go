@@ -2,6 +2,7 @@ import {useQueue, queue, submitDownload} from '../queue/session';
 import {useEffect,useRef,useState} from 'react';
 import {invoke} from '@tauri-apps/api/core';
 import {nativeError} from '../converter/conversion';
+import {selectDownloadOutput,type DownloadDestination} from './destination';
 import {active,mergeJob,initialSettings,settingsError,urlError,contract,effectiveAudio,lossy,defaultName,type DownloadSettings,type DownloadJob,type DownloadMedia,type DownloadPlan,type Capabilities} from './model';
 
 export function useDownloader(engineReady:boolean){
@@ -42,17 +43,21 @@ export function useDownloader(engineReady:boolean){
   if(e==='libopus'&&(patch.format||patch.audioEncoder))next.sampleRate=48000;
   return next;
  });}
- async function chooseFolder(){if(lock.current||busy||otherBusy)return;lock.current=true;setPending(true);try{const path=await invoke<string|null>('choose_download_folder');if(path)setFolder(path);}catch(cause){setError(nativeError(cause));}finally{lock.current=false;setPending(false);}}
  async function start(){
-  if(lock.current||busy||!inspection||!visiblePlan||localError||!folder||!name.trim()||name.length>100)return;
+  if(lock.current||busy||!inspection||!visiblePlan||localError)return;
+  const input={inspectionId:inspection.id,settings,title:inspection.media.title,source:inspection.media.source,name};
   lock.current=true;setPending(true);setError(null);
-  try{setSubmittedId(await submitDownload(inspection.id,settings,name,inspection.media.title,inspection.media.source));}
-  catch(cause){setError(nativeError(cause));}finally{lock.current=false;setPending(false);}
+  try{
+   const selected=await selectDownloadOutput(input,(suggested,format)=>invoke<DownloadDestination|null>('choose_download_folder',{suggested,format}));
+   if(!selected)return;
+   setFolder(selected.folder);setName(selected.name);
+   setSubmittedId(await submitDownload(selected.inspectionId,selected.settings,selected.name,selected.title,selected.source));
+  }catch(cause){setError(nativeError(cause));}finally{lock.current=false;setPending(false);}
  }
  async function cancel(){
   if(active(job)){try{await invoke('cancel_download',{id:job!.id});}catch(cause){setError(nativeError(cause));}}
   else if(outputEntry)queue.cancel(outputEntry.id);
  }
- return {inspectionError:job?.stage==='failed'?job.message:null,browserSource:job?.browserSource,queueBusy,lastEntry,url,setUrl,job:visibleJob,inspection,settings,change,capabilities,error,pending,busy,otherBusy,folder,name,setName,plan:visiblePlan,planning,planError:localError??planError,inspect,inspectBrowser,chooseFolder,start,cancel};
+ return {inspectionError:job?.stage==='failed'?job.message:null,browserSource:job?.browserSource,queueBusy,lastEntry,url,setUrl,job:visibleJob,inspection,settings,change,capabilities,error,pending,busy,otherBusy,folder,name,plan:visiblePlan,planning,planError:localError??planError,inspect,inspectBrowser,start,cancel};
 }
 export type DownloaderController=ReturnType<typeof useDownloader>;

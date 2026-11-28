@@ -31,7 +31,6 @@ use std::{
     },
     time::Duration,
 };
-use tauri_plugin_dialog::DialogExt;
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -519,34 +518,32 @@ pub async fn choose_download_folder(
     window: tauri::WebviewWindow,
     state: tauri::State<'_, Runtime>,
     shared: tauri::State<'_, conversion::Runtime>,
-) -> Result<Option<String>> {
+    suggested: String,
+    format: String,
+) -> Result<Option<Value>> {
+    plan::container(&format)?;
     let operation = shared.core.inspect()?;
     let runtime = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let _operation = operation;
-        let chosen = window
-            .dialog()
-            .file()
-            .set_parent(&window)
-            .set_title("Choose download destination folder")
-            .blocking_pick_folder();
-        let Some(chosen) = chosen else {
-            return Ok(None);
-        };
-        let path = chosen
-            .into_path()
-            .map_err(|_| "Cannot access that folder.")?
-            .canonicalize()
-            .map_err(|_| "Cannot access that folder.")?;
-        if !path.is_dir() {
-            return Err("Choose a destination folder.".into());
+        let Some(chosen) = conversion::save_destination(
+            &window, format!("{}.{}", filename(&suggested), format), &format, false,
+        )? else { return Ok(None); };
+        let folder = chosen.parent().ok_or("Choose an output location.")?
+            .canonicalize().map_err(|_| "Cannot access that folder.")?;
+        let name = filename(chosen.file_stem().and_then(|n| n.to_str())
+            .ok_or("Invalid output filename.")?);
+        let destination = folder.join(format!("{}.{}", name, format));
+        if destination.exists() {
+            return Err("That filename already exists. Choose another name; existing files are never overwritten.".into());
         }
-        runtime.inner.lock().unwrap().folder = Some(path.clone());
-        Ok(Some(path.to_string_lossy().into_owned()))
+        runtime.inner.lock().unwrap().folder = Some(folder.clone());
+        Ok(Some(json!({"folder":folder.to_string_lossy(),"name":name})))
     })
     .await
-    .map_err(|_| "Could not choose destination folder.")?
+    .map_err(|_| "Could not choose output destination.")?
 }
+
 pub fn filename(name: &str) -> String {
     let s: String = name
         .chars()

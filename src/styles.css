@@ -277,7 +277,7 @@ progress:indeterminate::-webkit-progress-value { background: transparent; }
 .companion-guide:enabled:hover,.companion-guide:enabled:active { background: var(--color-hover); border-color: var(--color-button-border); color: var(--color-text); }
 .companion-remove:enabled:hover,.companion-remove:enabled:active { background: #b91c1c; border-color: #b91c1c; color: #fff; }
 .browser-entry .file-empty { inline-size: 100%; }
-.downloader .download-filename-help { margin-block-end: var(--space-5); }
+.downloader .download-path { margin-block-end: var(--space-5); }
 .online-media-heading { margin-block: 0 var(--space-5); }
 .browser-source { min-inline-size: 0; }
 .browser-source h4 { margin-block: var(--space-2); }
@@ -351,3 +351,12 @@ summary,a{transition:color var(--motion-fast),background-color var(--motion-fast
 @media(prefers-reduced-motion:no-preference){:root.theme-changing,:root.theme-changing *,:root.theme-changing *::before,:root.theme-changing *::after{transition:background-color 150ms ease,color 150ms ease,border-color 150ms ease,outline-color 150ms ease,fill 150ms ease,stroke 150ms ease}}
 
 .file-preview{border-radius:var(--radius-control);overflow:hidden}.file-preview img{border-radius:inherit}
+
+.history-switch{display:inline-flex;align-items:center;gap:var(--space-3);position:relative;cursor:pointer}
+.history-switch input{position:absolute;width:1px;height:1px;opacity:0}
+.switch-track{width:38px;height:22px;border-radius:11px;border:1px solid var(--color-control-border);background:var(--color-sidebar);position:relative;flex:none}
+.switch-track::after{content:'';position:absolute;width:16px;height:16px;left:2px;top:2px;border-radius:50%;background:var(--color-secondary);transition:transform var(--motion-fast)}
+.history-switch input:checked+.switch-track{background:#4285f4;border-color:#4285f4}
+.history-switch input:checked+.switch-track::after{transform:translateX(16px);background:white}
+.history-switch input:focus-visible+.switch-track{outline:3px solid var(--color-focus);outline-offset:3px}
+.history-switch:has(input:disabled){opacity:.6;cursor:not-allowed}

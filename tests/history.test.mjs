@@ -36,3 +36,18 @@ test('title/filename search composes with task and terminal-status filters',()=>
  const records=[{title:'王秀英 annual review',output:'C:\\Downloads\\final.pdf',task:'Merge PDF',status:'completed'},{title:'Other',output:null,task:'Downloader',status:'failed'}];
  assert.equal(filterHistory(records,'FINAL','Merge PDF','completed').length,1);assert.equal(filterHistory(records,'王秀英','','').length,1);assert.equal(filterHistory(records,'','Downloader','failed').length,1);assert.equal(filterHistory(records,'missing','','').length,0);
 });
+
+test('disabling recording persists across reloads, preserves saved records and leaves Queue intact',async()=>{
+ const existing={id:'saved'},queue=new Scheduler();let enabled=true,records=[existing];
+ const transport=async op=>{if(op.action==='enabled')enabled=op.enabled;return {enabled,records:[...records]};};
+ const store=new HistoryStore(transport);
+ await store.change({action:'load'});assert.equal(store.getSnapshot().enabled,true);
+ let release;queue.submit(meta,{run:()=>new Promise(r=>{release=r;})});
+ const before=queue.getSnapshot();
+ await store.change({action:'enabled',enabled:false});
+ assert.equal(store.getSnapshot().enabled,false);assert.deepEqual(store.getSnapshot().records,[existing]);assert.deepEqual(queue.getSnapshot(),before);
+ const restored=new HistoryStore(transport);await restored.change({action:'load'});
+ assert.equal(restored.getSnapshot().enabled,false);assert.deepEqual(restored.getSnapshot().records,[existing]);
+ await restored.change({action:'enabled',enabled:true});assert.equal(restored.getSnapshot().enabled,true);
+ release();await wait();
+});

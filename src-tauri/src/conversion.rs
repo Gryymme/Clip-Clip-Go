@@ -1158,37 +1158,53 @@ pub async fn choose_queue_destination(
 ) -> Result<Option<String>> {
     let core = state.core.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let mut dialog = window
-            .dialog()
-            .file()
-            .set_parent(&window)
-            .set_title(if folder_output {
-                "Name a NEW output folder"
-            } else {
-                "Save output without overwriting"
-            })
-            .set_file_name(suggested);
-        if !folder_output {
-            dialog = dialog.add_filter(format.extension().to_uppercase(), &[format.extension()]);
-        }
-        let Some(chosen) = dialog.blocking_save_file() else {
+        let Some(path) = save_destination(&window, suggested, format.extension(), folder_output)? else {
             return Ok(None);
         };
-        let mut path = chosen
-            .into_path()
-            .map_err(|_| "Could not access that destination.")?;
-        if !folder_output {
-            path.set_extension(format.extension());
-        }
-        if path.exists() || !path.parent().is_some_and(|p| p.is_dir()) {
-            return Err(
-                "Choose a new destination in an accessible folder. Existing outputs are protected."
-                    .into(),
-            );
-        }
         core.inner.lock().unwrap().destinations.insert(path.clone());
         Ok(Some(path.to_string_lossy().into_owned()))
     })
     .await
     .map_err(|_| "Could not choose a destination.".to_string())?
+}
+
+pub(crate) fn save_destination(
+    window: &tauri::WebviewWindow,
+    suggested: String,
+    extension: &str,
+    folder_output: bool,
+) -> Result<Option<PathBuf>> {
+    let mut dialog = window
+        .dialog()
+        .file()
+        .set_parent(window)
+        .set_title(if folder_output {
+            "Name a NEW output folder"
+        } else {
+            "Save output without overwriting"
+        })
+        .set_file_name(suggested);
+    if !folder_output {
+        dialog = dialog.add_filter(extension.to_uppercase(), &[extension]);
+    }
+    let Some(chosen) = dialog.blocking_save_file() else {
+        return Ok(None);
+    };
+    let path = chosen
+        .into_path()
+        .map_err(|_| "Could not access that destination.")?;
+    save_path(path, extension, folder_output).map(Some)
+}
+
+fn save_path(mut path: PathBuf, extension: &str, folder_output: bool) -> Result<PathBuf> {
+    if !folder_output {
+        path.set_extension(extension);
+    }
+    if path.exists() || !path.parent().is_some_and(|p| p.is_dir()) {
+        return Err(
+            "Choose a new destination in an accessible folder. Existing outputs are protected."
+            .into(),
+        );
+    }
+    Ok(path)
 }

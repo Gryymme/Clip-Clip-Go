@@ -4,6 +4,21 @@ use crate::process::Captured;
 use std::{collections::VecDeque, fs, time::Duration};
 
 #[test]
+fn save_destination_enforces_selected_extension_and_protects_existing_outputs() {
+    let dir = test_dir();
+    let typed = dir.path().join("Chosen name.mp3");
+    let expected = dir.path().join("Chosen name.mp4");
+    assert_eq!(save_path(typed.clone(), "mp4", false).unwrap(), expected);
+    assert_eq!(save_path(typed, "mkv", false).unwrap(), dir.path().join("Chosen name.mkv"));
+    fs::write(&expected, "existing output").unwrap();
+    assert!(save_path(dir.path().join("Chosen name.wav"), "mp4", false).is_err());
+    assert_eq!(fs::read_to_string(&expected).unwrap(), "existing output");
+    assert!(save_path(dir.path().join("missing/file.mp4"), "mp4", false).is_err());
+    let pages = dir.path().join("new pages");
+    assert_eq!(save_path(pages.clone(), "png", true).unwrap(), pages);
+}
+
+#[test]
 fn session_queue_ownership_inputs_destinations_and_shutdown() {
     let dir = test_dir();
     let input = dir.path().join("source.txt");

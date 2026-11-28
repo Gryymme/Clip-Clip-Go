@@ -1,211 +1,98 @@
 # Clip-Clip-Go
 
-Clip-Clip-Go is a Windows desktop application combining single-link media downloading with local media, image and text/PDF conversion. Visible branding is **ClipClipGO**. A shared session Queue manages output jobs; History saves finished execution attempts locally.
-
-## Visual showcase
-
-Local conversion and the light theme in ClipClipGO. See the screenshots in each feature section for more views.
-
-![Converter with a selected file and output options](<demo-images/converter-page-file-populated.png>)
-
-![ClipClipGO in light mode](<demo-images/light-mode-screenshot.png>)
+**ClipClipGO** is a Windows desktop app for single-link media downloads and local file conversion. A session Queue runs output jobs one at a time; optional History records finished attempts on this computer.
 
 ## Downloader
 
-### Downloader and browser companion screenshots
+Paste a media-page or direct HTTP(S) media URL, choose **Inspect link**, then select the source quality and output settings. Choose **Download** (or **Add to queue**) to open the native Save dialog for both location and filename. The suggested name comes from the title; the selected output format determines the extension, including when another extension is typed. Cancelling the dialog preserves the current setup. Existing files are never overwritten.
 
-![Downloader before inspecting a media link](<demo-images/downloader-page-empty.png>)
+![Inspected media with source quality and output settings](demo-images/downloader-page-media-link-populated.png)
 
-![Downloader with inspected media and output options](<demo-images/downloader-page-media-link-populated.png>)
-
-![Downloader with media received from the browser companion](<demo-images/downloader-page-broswer-companion-populated.png>)
-
-![Browser companion popup before media discovery](<demo-images/extension-popup-window-empty.png>)
-
-![Browser companion popup with discovered media](<demo-images/extension-popup-window-populated.png>)
-
-
-
-
-The optional **ClipClipGO browser companion** adds user-granted-site Chrome media discovery and Native Messaging handoff. Select a detected HTTP file/HLS/DASH source; the app inspects that media URL directly and reuses the source/output workflow. Download still requires confirmation in ClipClipGO. Website access is optional and origin-scoped; some frames/CDNs need separate grants. No cookies, Authorization headers, browser cache or credentials are imported. Detection does not guarantee download or universal site support.
-
-Companion **0.5.1** includes bounded open-shadow/dynamic-player scanning and recovery of recognizable already-loaded resources. It distinguishes detected resources from YouTube watch/Shorts/embed and Instagram item pages offered for desktop yt-dlp inspection; feed URLs and YouTube’s individual videoplayback streams are not presented as complete downloads. Instagram session-only media and multi-item carousels can still fail. Reload the existing unpacked folder after rebuilding; check its runtime version under **Settings and privacy**. Page handoff requires the updated desktop/native host (use existing Settings repair/connect if needed). Exact supplied-site probes were blocked by socket/DNS failures; fixtures do not prove live-site support. See [coverage and verification limits](docs/downloader.md#browser-discovery-coverage--2026-11-27-extension-010--020).
-
-Settings offers **Extension Installation Guide** (also reachable from Downloader’s **Browser companion setup**) with a supported **Load unpacked** path: open/copy `chrome://extensions/`, enable Developer mode, select the app’s `extension` folder, paste Chrome’s actual extension ID into ClipClipGO, and choose **Connect / Finish setup**. Then open the extension popup and click **Connect**. No PowerShell registration is required. The app resolves its actual install folder (including custom/per-user installs); debug builds identify their project fallback when needed. Setup writes only the owned per-user bridge; **Connected** requires a real handshake. No store listing is currently configured. See [Browser companion setup](docs/browser-companion.md) for removal, permissions and verification limits.
-
-Choose **Allow this site** once. Detection runs automatically across open tabs/navigation on permitted sites until browser access is revoked; there is no app-imposed activation timeout. Candidates still expire after ten minutes and clear on navigation/tab closure. The popup’s Settings dialog lists actual grants with revocation, CDN/frame access troubleshooting, privacy actions and a saved extension-only Light/Dark preference. Sending a source or losing the desktop connection does not stop discovery.
-
-Paste one HTTP/HTTPS media-page or direct-media URL, choose **Inspect link**, select a source and final output, review the native execution summary, choose a destination folder and filename, then download. Inspection is cancellable and limited to 60 seconds; missing metadata stays unknown. Source quality defaults to Best available, with distinct reported resolutions/frame rates and advanced exact video/audio stream selection. Separate video/audio streams are merged; video-only and audio-only sources are identified without claiming nonexistent audio.
-
-| Settings | Implemented choices |
+| Output | Options |
 | --- | --- |
-| Video container | MP4, MKV, WebM |
-| Resolution | Same as source; applicable 2160p, 1440p, 1080p, 720p, 480p, 360p; aspect ratio preserved, no upscaling |
-| Frame rate | Same as source; 24, 25, 30, 50, 60 fps. Increases duplicate frames; no interpolation |
-| Video encoding | Auto or compatible available H.264, HEVC, VP9, AV1 software encoders |
-| Video quality | Preserve compatible streams, High, Balanced, Smaller file; distinct custom target bitrate mode (100–100000 kb/s) |
-| Video audio | Keep or Remove; compatible audio codec, bitrate, sample rate and channel controls |
-| Audio output | MP3, M4A/AAC, WAV/PCM 16-bit, FLAC, OGG/Vorbis, Opus |
-| Audio bitrate | Preserve/compatible default, 64/96/128/160/192/256/320 kb/s presets and codec-validated custom target; hidden for lossless/PCM |
-| Sample rate/channels | Same as source and codec-compatible rates from 8–96 kHz; Same, Mono, Stereo channels. Opus uses 48 kHz; multichannel MP3 needs explicit Mono/Stereo |
+| Video | MP4, MKV, WebM; compatible available H.264, HEVC, VP9 and AV1 encoders |
+| Resolution / frame rate | Original or applicable smaller resolutions through 2160p; original or 24/25/30/50/60 fps |
+| Quality | Preserve compatible streams, quality presets, or a separate custom target-bitrate mode |
+| Audio | Keep/remove video audio; MP3, M4A, WAV, FLAC, OGG or Opus audio output |
+| Advanced audio | Compatible codec, bitrate, sample rate and channel settings; bitrate hidden for lossless/PCM |
 
-Advanced settings are expandable. A shared native compatibility contract drives both frontend and Rust validation. The plan copies/remuxes compatible streams and re-encodes only streams that require changes. Preserve mode uses a balanced preset if encoding is necessary. Unknown source codecs produce a provisional plan that is checked against FFprobe after download. Higher bitrates/quality settings and converting lossy audio to FLAC cannot restore detail; source sizes may be approximate and final size/bitrate is not promised.
+Separate video/audio streams are merged. Compatible streams are copied/remuxed; only streams requiring changes are re-encoded. Missing source details remain unknown and downloaded streams are checked before publication. There is no resolution upscaling or frame interpolation; increasing frame rate duplicates frames, and higher bitrate/lossless output cannot recover missing detail. Source sizes may be estimates.
 
-The link input uses the same selection card as Converter and Images to PDF. Source IDs remain fixed after planning: measured frame rates or other approximate metadata cannot silently select another stream after download. Each source re-extracts the original page to resolve current media links, with one fresh extraction retry after HTTP 403/410. Completed files come from structured yt-dlp completion records and must belong to the job workspace. Stage-specific errors offer expandable, bounded diagnostics with engine exit status and selected IDs; credentials and URLs are redacted.
+Inspection is cancellable and time-limited. Downloads report measured stages/progress, support cancellation across navigation, stage work in owned temporary directories, and validate output with FFprobe before protected publication. The queued job retains its selected source, settings, name and destination.
 
-Downloads use bundled **yt-dlp 2026.10.26**, including its embedded EJS challenge scripts, **Deno 2.9.8**, and the existing **FFmpeg/FFprobe 9.0.2 essentials**. The two added raw executables total **121,657,312 bytes (116.02 MiB)**, plus retained notices; compressed installer growth is not measured. Developer preparation is pinned and checksum-verified. Users install nothing, configure no PATH and download no engines/components at first launch. There are no automatic engine updates.
+Site support depends on yt-dlp and source availability. Playlists, live streams, login/cookie importing, DRM/access-control bypass and automatic engine updates are unsupported. Some sites require credentials or expire URLs; detection does not guarantee downloading. See [Downloader implementation and verification limits](docs/downloader.md).
 
-Actual native stages are Inspecting, Downloading, Merging, Converting and Finalizing. Progress identifies the current source and resets between sources. It uses measured bytes or fragment counts, labels byte estimates with “About”, and stays indeterminate when no total or estimate is available. Completion of one stream does not complete the job. Download state and cancellation survive navigation. All output-producing work shares one native operation lease, including conversion; metadata inspection uses separate owned controls. Windows process trees are terminated on cancellation/timeouts/normal app exit. Streams, merges and conversion outputs stay in a unique job directory; FFprobe validates output before atomic publication without overwriting. Windows filenames are sanitized. Protected publication requires a destination filesystem supporting hard links; unsupported destinations fail explicitly. Crashes/power loss can leave staging directories; crash recovery is not implemented.
+### Chrome browser companion
 
-Support depends on the pinned yt-dlp extractor and site behavior; every website is not promised. Supported HTTP/native HLS/DASH sources must be one completed, unprotected item. Pure playlists/channels, live/upcoming/processing streams, authentication/cookie importing, DRM/access-control bypass, playlist batches are outside this milestone. A watch URL with a playlist parameter selects its item only. No artificial download quotas are imposed. Subtitles, chapters, attachments, HDR preservation/tone mapping and rich downloaded metadata are not implemented; re-encoded video uses yuv420p.
+The optional companion sends discovered media or a supported media page to Downloader. Direct files/manifests are inspected as resources; extractor-backed page candidates remain distinguished from confirmed media. Sending does not start a download: review the source/output settings and confirm in ClipClipGO.
 
-See [Downloader implementation, correction evidence and manual checklist](docs/downloader.md) and [engine provenance/notices](third-party/downloader/NOTICE.md). Routine integration tests use generated media and a local HTTP fixture, independent of public sites. An explicitly authorized YouTube fixture passed watch/share inspection and a 360p two-source download through merge, FFprobe validation and publication; this does not establish universal YouTube or default-2160p compatibility. Native dialogs and app appearance remain manual. Public binary redistribution remains blocked by GPL source/material preparation and the final dependency-license review; no installer is built in this milestone.
+![Browser-discovered media received inside Downloader, in the light theme](demo-images/downloader-page-broswer-companion-populated-lightmode.png)
 
-## Shared session Queue
+| Ready to connect | Media page found |
+| --- | --- |
+| <img src="demo-images/extension-popup-window-empty.png" alt="Light-theme companion popup with Connect and no detected media" width="360" /> | <img src="demo-images/extension-popup-window-populated.png" alt="Dark-theme companion popup with a selected page available for desktop inspection" width="360" /> |
 
-![Session Queue populated with application jobs](<demo-images/queue-page-populated.png>)
+Set up through **Settings → Extension Installation Guide** or Downloader's **Browser companion setup**:
 
-Converter, Images to PDF, Merge PDF and Downloader submit to one in-memory scheduler. When idle, submission starts normally; while busy, **Add to queue** accepts another configured task. Conversion Save dialogs run before submission, so waiting tasks already have destinations. Input order, options, inspected download source and destination are captured at submission. Metadata inspection, thumbnails and previews are not output jobs. Receiving browser media still only inspects it; downloading requires explicit submission after configuration.
+1. Open `chrome://extensions/` and enable **Developer mode**.
+2. Choose **Load unpacked** and select the app's `extension` folder. The guide provides **Open extension folder** and **Copy folder path**, resolving the actual installation location or an identified development fallback.
+3. Paste the ID displayed by Chrome into ClipClipGO and choose **Connect / Finish setup**. Open the extension popup and click **Connect**. A real handshake confirms connection; a saved ID does not.
 
-One output job runs globally through transfer, merge/conversion, validation, protected publication and cleanup. Inputs and destinations are checked again at execution. Competing destinations fail safely rather than overwrite; failures and cancellation release the slot after cleanup. Duplicate unfinished submissions with identical inputs/settings/destination are coalesced. Queue shows actual stage progress (or an indeterminate bar), waiting/running/cancelling/completed/failed/cancelled states, keyboard-accessible waiting reorder controls, cancellation, removal and Clear finished. Finished-job results and errors appear in Queue rather than feature-page result panels. Results remain until cleared; long sessions use 40-entry pages. Completed outputs/folders can be opened through an action restricted to outputs published during this session.
+No PowerShell registration is needed. No official store listing is currently configured. Production store installation, if distributed later, would not require Developer mode.
 
-Navigation does not stop processing. Closing requests a fresh scheduler count and confirms discarded waiting work/interrupted processing, then blocks new output starts, cancels owned work and waits for worker leases before exiting. Waiting work and session results are **not resumed after restarting**, and nothing continues in the background after exit. Queue data, signed media URLs and request context are not persisted. Queued media can expire or become inaccessible; inspect and submit it again if needed. No pause/resume, automatic queue retries, timed scheduling or concurrency setting is implemented. Forced termination/power loss retains the existing possibility of orphaned staging files.
+Use **Allow** to grant site access explicitly. Detection runs across permitted tabs/navigation until access is revoked; candidates remain temporary and expire independently. Settings provides actual grant review/revocation, additional origin access, diagnostics, clear-data and an extension-only theme preference. Page discovery can identify resource URLs without granting their CDN access; observing CDN requests or loading restricted thumbnails may need a separate explicit grant. Static thumbnails use associated posters, readable bounded video-frame snapshots, then an icon.
 
-Focused checks: `node --experimental-strip-types --test tests/queue.test.mjs tests/queue-runner.test.mjs`, `node scripts/check-queue-layout.mjs`, and `cargo test --manifest-path src-tauri/Cargo.toml --bin clip-clip-go --offline session_queue`. Layout checks use isolated SSR fixtures/CSS inference, not desktop verification.
+No browser cookies, Authorization headers, passwords, response bodies or browsing history are collected. Media URLs/context remain session-scoped. Remove the extension through Chrome's Extensions page; bridge resources remain app-owned and can be removed through ClipClipGO maintenance. Removing the extension does not delete downloads or desktop History. See [setup, permissions and removal](docs/browser-companion.md).
 
-## Persistent History
+## Converter
 
-History saves the newest **500 finished execution attempts**, newest first, across Converter, Images to PDF, Merge PDF and Downloader. Queue and History share the same cards and path formatting. History offers title/output-filename search, task/status filters, individual removal, and confirmed Clear history. Removing records never deletes output files. Completed output/folder actions remain available after restart; moved or missing files show an action error without rewriting their historical success.
+Choose/drop one file, select an output, then choose its destination and filename in the native Save dialog.
 
-Settings → **Save job history** defaults to enabled. Turning it off preserves existing records and Queue behavior. Only new terminal attempts are recorded; there is no backfill, rerun action, automatic retry or queue resumption. Waiting jobs removed or cancelled before execution are not execution attempts and do not enter History. Clearing Queue does not clear History, and clearing History does not change Queue.
-
-A versioned `history-v1.json` file in per-user app data is updated serially through atomic replacement. It stores attempt IDs, start/finish times, task/type/title, an output settings summary, local input filenames (or an online source hostname), successful published output paths and fixed sanitized failure categories. Local filenames/output paths can reveal personal information. History does **not** save full snapshots, raw engine logs, media URLs/queries, headers/context, credentials, native messages, remote thumbnail URLs or preview blobs. It uses default file illustrations without thumbnail requests. A bounded ID ledger prevents duplicate notifications from restoring recently removed records.
-
-Missing storage is an empty History. Malformed/unsupported files are preserved and recording reports a recovery error instead of overwriting them. Repair or move the file aside and Retry; storage failures never change job results or stop Queue, but failed writes are not automatically replayed. Normal close flushes pending notifications/writes after native cleanup, with a 10-second frontend-response limit. Forced exit, power loss or an unresponsive frontend may lose pending records. History is metadata only; **Queue remains session-only** and waiting work is never resumed.
-
-## Implemented conversions
-
-### Converter, Images to PDF and Merge PDF screenshots
-
-![Converter before choosing a source file](<demo-images/converter-page-empty.png>)
-
-![Images to PDF before adding image pages](<demo-images/imagestopdf-page-empty.png>)
-
-![Images to PDF with selected image pages](<demo-images/imagestopdf-page-populated.png>)
-
-![Merge PDF before adding source PDFs](<demo-images/mergepdf-page-empty.png>)
-
-![Merge PDF with selected PDF files](<demo-images/mergepdf-page-populated.png>)
-
-
-
+![Selected video and available conversion outputs](demo-images/converter-page-file-populated.png)
 
 | Input | Outputs |
 | --- | --- |
-| MP4, MKV, WebM, MOV | MP4, MKV, WebM, animated GIF; audio extraction to MP3, WAV, FLAC, M4A |
-| MP3, WAV, FLAC, M4A, OGG | MP3, WAV, FLAC, M4A |
-| JPEG/JPG, PNG, WebP, BMP, TIFF/TIF (one still image); HEIC (primary still) | JPG, PNG, WebP, BMP, TIFF |
-| TXT | Markdown, HTML, PDF |
-| Markdown (.md/.markdown) | TXT, HTML, PDF |
-| HTML (.html/.htm) | TXT, Markdown, PDF |
-| PDF | TXT, Markdown, HTML, PNG page images, JPEG page images |
-| Multiple supported still images, on Images to PDF | One PDF in the visible list order |
-| Multiple PDFs, on Merge PDF | One PDF containing all pages in the visible file order |
+| MP4, MKV, WebM, MOV | MP4, MKV, WebM, GIF; extract MP3, WAV, FLAC, M4A audio |
+| MP3, WAV, FLAC, M4A | MP3, WAV, FLAC, M4A |
+| JPG/JPEG, PNG, WebP, BMP, TIF/TIFF, HEIC | JPG, PNG, WebP, BMP, TIFF |
+| TXT, Markdown, HTML | TXT, Markdown, HTML, PDF |
+| PDF | TXT, Markdown, HTML, PNG, JPG |
 
-For an inspected video stream, **GIF** offers a maximum edge of 320, 480 (default), 640 or 960 px and 10 (default), 15 or 20 fps. The UI shows the resulting dimensions and selected frame rate. Display aspect ratio (including non-square pixels) and right-angle rotation are applied; smaller sources are not enlarged. GIF settings survive navigation in the session. Audio, subtitles, metadata and chapters are excluded, and GIFs loop continuously. There is no trimming: the whole video stream is converted. Long/high-resolution clips can produce large files and take time to process. GIF uses a limited color palette and dithering; color banding/detail loss is possible. Frame delays have hundredth-second precision, so 15 fps uses rounded delays; extremely short clips producing fewer than two frames fail explicitly. Inputs without usable dimensions or with unsupported non-right-angle display rotation cannot use GIF.
+Audio extraction requires an audio stream. GIF has no audio and can become large for long/high-resolution clips. Still-image conversion applies orientation and preserves oriented dimensions; JPEG flattens transparency onto white. Metadata/ICC preservation and color management are not provided. Animated/multipage still-image inputs are rejected. HEIC is input-only: primary 8-bit SDR HEVC still images are supported; HDR/wide-gamut, ICC, alpha/gain maps and sequences are unsupported. See [HEIC scope and notices](third-party/heic/NOTICE.md).
 
-GIF uses the bundled FFmpeg in two passes: palette analysis is indeterminate, then palette-based encoding reports measured output time. A unique temporary workspace holds the palette and encoded GIF; cancellation terminates the engine and removes owned intermediates. Before protected publication, the app checks GIF structure, dimensions, multiple frames, frame timing and the continuous-loop extension, and fully decodes all frames with bundled FFmpeg. No external runtime or dependency was added.
+Document conversion excludes Microsoft Office/OpenDocument formats. HTML is inert: no JavaScript execution or remote-resource fetching. Generated PDFs reflow supported content with an embedded Noto Sans font; they do not reproduce HTML/CSS page designs. Generation supports tested Latin/diacritics, Greek and Cyrillic; unsupported glyphs fail explicitly.
 
-Extension matching is case-insensitive. Markdown output uses `.md`, HTML uses `.html`, and JPEG uses `.jpg`. Identical-format document conversions are not offered. Microsoft Office and OpenDocument formats, including DOC/DOCX, RTF, XLS/XLSX, PPT/PPTX, ODT, ODS and ODP, are unsupported. **LibreOffice and optional Office installation are permanently cancelled.** The short historical decision is in [docs/office-runtime.md](docs/office-runtime.md).
+PDF text output is **reconstructed content**: original styling, exact tables and perfect reading order are not preserved. OCR and password-protected PDFs are unsupported. PDF-to-image output uses 150 DPI and an optional page range; enter a **new output folder name** in the Save dialog for ordered page files. See [text/PDF formats, safety limits and font coverage](docs/text-pdf.md).
 
-Select files with native dialogs or drop supported local files onto the selection card. Converter accepts exactly one file; multiple files produce “Choose one file”. Images to PDF appends supported images in delivered order, keeps existing duplicate handling, and reports rejected or excess files. Directories and URLs are rejected. File changes are blocked while a submission is being prepared; queued/running jobs use immutable snapshots, so later configuration edits affect future submissions only; Choose buttons remain the keyboard alternative. Metadata is obtained natively without loading files into the frontend. Content is checked by the applicable provider. Selection, output choices, image order, page settings and the current job survive navigation during the session. There is one active download or conversion across all providers. Theme preferences and finished-job History are saved locally; there is no saved conversion configuration, persistent queue or database.
+## Images to PDF
 
-## Navigation and file previews
+Add 1–100 still images, reorder them, and choose A4, Letter, Legal, Custom or Image sized. Image sized is the default and uses oriented pixels at 150 DPI without margins. Fixed/custom pages fit inside half-inch margins; Custom supports inches, centimeters or pixels with DPI. Changing units/DPI preserves physical dimensions. Each custom side must exceed 1 inch (2.54 cm) and be at most 200 inches (508 cm); DPI must be 1–2400.
 
-The sidebar displays **ClipClipGO** and provides Downloader, Converter, Images to PDF, Merge PDF, Queue, History and Settings. **Converter** opens the single-file workflow; **Images to PDF** and **Merge PDF** have their own pages. Navigation retains selections and options, and an active conversion remains visible and cancellable across pages. Project and application identifiers are unchanged.
+![Ordered images with PDF page-size controls](demo-images/imagestopdf-page-populated.png)
 
-The full-height sidebar is attached to the left edge and stays in place while the workspace scrolls. Short windows scroll navigation internally; narrow layouts move it above the workspace. Locally bundled Montserrat, shared controls and distinct keyboard focus are used throughout. Full paths and detailed engine information are expandable rather than dominating the workspace. The centered brand has a blue GO; the dynamic-year GRYYMME © attribution is anchored at the sidebar bottom. Decorative borders are subtle, while input boundaries and keyboard focus stay distinct.
+Images are flattened onto white and embedded as JPEG quality 90; output is not claimed lossless. Limits include 100 million combined decoded pixels, with per-image limits of 16 million pixels, 16,384 pixels per side and 128 MiB input/decoded data.
 
-Selected images show oriented thumbnails; video shows one frame generated by bundled FFmpeg, with no playback. Audio and documents use local vector icons. Preview work returns only bounded PNG data (up to 320×240 pixels and 384 KiB) and image dimensions, never the original file to the frontend. There are no preview files or object URLs to retain. Replacing/removing a selection cancels or ignores stale work; app exit cancels owned preview processes. Loading/fallback states keep a fixed footprint, and unavailable previews do not prevent valid conversion.
+## Merge PDF
 
-Originals are preserved. The native Save dialog chooses a new destination; output extensions are enforced. Existing/identical destinations are rejected, including publication races. Validated output is staged beside its destination and published without overwriting. Cancellation takes effect at safe processing boundaries; an encoding/rendering operation may finish before cancellation is observed. No simulated jobs, progress or success are shown.
+Add 2–100 PDFs, arrange their order and save a new document. Complete pages are imported without rasterizing or reconstructing text; page dimensions/rotation are retained. Limits are 128 MiB combined input, 128 MiB output and 500 combined pages.
 
-Settings → **Theme** offers **System Default**, **Light** and **Dark**. System Default follows OS appearance changes; explicit choices override it. The preference (including system) is stored locally across restarts. Theme tokens cover application controls and scrollbars where supported; native Windows dialogs/title bars retain Windows styling. Solid action buttons use #4285F4 with white text, as requested; its approximately 3.56:1 contrast is below the AA requirement for normal-sized text.
+![Ordered PDF inputs ready to merge](demo-images/mergepdf-page-populated.png)
 
-Images to PDF uses the shared compact file cards, with oriented native thumbnails, readable sizes and source dimensions where available. Previews load sequentially and are cached for the selected list across navigation/reordering; removal releases cached data. Preview failure does not block PDF creation.
+Encrypted or invalid files block merging rather than being skipped. Complex/internal links, forms, bookmarks, attachments, layers, accessibility tags and metadata are not guaranteed to survive. Digital signatures must not be treated as valid after merging. Review important documents in a PDF viewer; merging is not an active-content sanitizer.
 
-The UI font is the unmodified [official Montserrat variable font](https://github.com/JulietaUla/Montserrat), bundled offline with its OFL license and pinned source/hash in `public/fonts/montserrat/`. The upstream variable asset is TTF (744,936 bytes); no font processing dependency was added. Generated PDFs still embed Noto Sans; native dialogs/title bars retain Windows typography.
+## Queue and History
 
-## Text and PDF
+Queue captures each submitted configuration, processes one job at a time and supports cancellation/removal. Waiting and finished session entries are not restored after restart; there is no automatic retry or pause/resume. Normal cancellation/exit cleans owned temporary work; crashes can leave staging directories. Protected Downloader publication requires a filesystem supporting hard links and fails explicitly otherwise.
 
-Text inputs must be UTF-8. Text outputs are UTF-8 with normalized LF line endings. TXT is treated literally, with Markdown/HTML syntax escaped. Native parsing preserves headings, paragraphs, lists, links, fenced code and basic tables where the output permits; exact round trips are not promised. Headerless HTML tables use their first row as a Markdown header; merged/nested table layout is not preserved. TXT keeps readable text and image alt text rather than rich layout or image pixels.
+![Queue with an active download and a waiting conversion](demo-images/queue-page-populated.png)
 
-HTML is parsed as inert data: JavaScript is never executed, scripts/styles/head metadata are ignored, and active objects are rejected. CSS, background images and interactive forms are outside the supported subset. No remote images, stylesheets or links are automatically fetched. Markdown raw HTML is shown literally. Supported image references are relative local raster files canonicalized inside the source folder, or validated embedded PNG data. Missing, unsupported, remote/UNC or escaping image references fail explicitly. HTML output is self-contained with embedded PNGs and a restrictive CSP; Markdown can contain PNG data URLs, which some viewers do not display. Absolute HTTP(S)/mailto links and fragments remain inert; unsafe and relative hyperlinks are rejected.
+History stores the newest 500 finished attempts locally, with search, task/status filters and output actions. **Save job history** in Settings switches future recording on/off. Switching it off preserves existing History and does not affect Queue. Removing records does not delete output files. Full media URLs and credentials are excluded, but filenames/paths can still be sensitive.
 
-### Generate PDF
-
-TXT, Markdown and HTML produce paginated A4 PDFs with wrapping and an **embedded Noto Sans Regular font**. Headings use larger text; lists, code, links (including their visible URLs), basic table rows and supported images are reflowed. This is a readable document layout, not HTML/CSS printing or preservation of an original page design. Images are flattened onto white and encoded as JPEG at quality 90; PDFs are not claimed lossless.
-
-Generation is tested with precomposed Latin/diacritics, Greek and Cyrillic. CJK, Arabic, Hebrew, Indic scripts, emoji, combining sequences and glyphs absent from the font are unsupported in this milestone. Unsupported characters cause a readable error identifying the code point instead of a silently blank glyph. Use precomposed characters where possible. Extraction/rendering of an existing PDF has different font coverage and may use its embedded fonts or platform substitutions.
-
-### Extract PDF text
-
-PDF → TXT/Markdown/HTML is **reconstructed content**, based on PDFium's text order. Original styling, exact tables, semantic heading levels and perfect multicolumn reading order are not recovered. Only extracted visible text is retained; annotation/link targets are not separately reconstructed. TXT separates pages with form feeds; Markdown uses page headings and escaped text; HTML uses page sections with escaped preformatted text.
-
-An image-only/no-extractable-text PDF produces an OCR-not-supported explanation; page image rendering remains available. Mixed PDFs preserve page boundaries, including blank-text pages. Encrypted/password-protected PDFs are rejected; password handling is not implemented.
-
-### PDF pages to images
-
-Choose PNG or JPEG and leave Pages blank for all pages, or enter a validated range such as `1-3, 5`. Duplicates are removed and results follow document order. Rendering uses **150 DPI**, respects page rotation/aspect ratio and produces white-background images, including JPEG quality 90.
-
-In the Save dialog, enter a **new output folder name**. Ordered files such as `document-page-001.png` are rendered sequentially in a job-owned staging directory. Every page is decoded again to validate its format/dimensions. Only the completed folder is published, without replacing an existing folder. Cancellation/failure removes the job's staging folder. Progress reports actual completed page counts.
-
-### Merge PDF
-
-Choose or drop 2–100 PDFs on **Merge PDF**. Add more files, remove entries or use keyboard-accessible Move up/Move down controls. Duplicate paths are ignored. Filenames, sizes and available page counts appear in the ordered list; selections and order survive navigation for the session. Invalid/encrypted entries display errors and block merging until removed. Rejected drop items are reported. Choose a new filename and folder in the native Save dialog.
-
-The bundled PDFium imports complete source page ranges with cross-document resource/reference remapping, without rasterizing pages or reconstructing text. Page dimensions and rotation are retained. Generated fixtures verify page count, order, extracted text, shared fonts/Form XObjects, annotations and matching rendered content across different page sizes/orientations. Basic page annotations and direct URI links are retained in the generated fixtures. Direct internal page-link destinations are dropped by the current PDFium import even when the link annotation survives. Named/complex links, interactive forms, bookmarks, attachments, layers, accessibility tags, metadata and digital signatures are **not guaranteed**. Merging creates a new document; signatures must not be treated as valid. Review important merged documents in your PDF viewer.
-
-Merge limits: 128 MiB combined input, 128 MiB output and 500 combined pages. Encrypted/password-protected, missing, unreadable and unsupported files fail the operation; files/pages are never intentionally skipped. Processing invokes no PDF actions and fetches no remote resources; this is not an active-content sanitizer for later PDF viewers. Merge uses the shared one-job slot, page-import progress and indeterminate writing/validation stages. Cancellation waits for the current native load/import/save call, then cleans owned temporary files. Output is staged beside the destination, reopened and checked for page count/dimensions before protected publication; existing outputs and all inputs are protected, including publication races. No dependency or external runtime was added.
-
-### Images to PDF
-
-Open **Images to PDF** in the sidebar; single-image conversion remains on Converter. Choose multiple still images (including HEIC alongside conventional images), add more, remove or use Move up/Move down. Each visible row becomes one PDF page in that order; duplicate additions are ignored. Choose **A4**, **Letter** (8.5 × 11 in), **Legal** (8.5 × 14 in), **Custom**, or **Image sized** (150 DPI, no margins). A fresh session defaults to **Image sized**; stored Custom values start at **8.5 × 11 inches** (96 DPI for pixel presentation). Those Custom values do not affect Image sized pages, which derive dimensions from oriented image pixels at 150 DPI. Options/edits remain selected across navigation; this form has no disk-persisted preferences or explicit reset action. Restarting the app creates a fresh form.
-
-Fixed and custom pages fit inside half-inch (12.7 mm) margins. Custom Width/Height accept decimal inches, centimeters or pixels. Pixels require DPI (default 96, range 1–2400): points = pixels × 72 / DPI; inches use 72 points and centimeters use 72 / 2.54 points per unit. Switching units or DPI preserves canonical physical dimensions without cumulative rounding. Each side must exceed 1 inch (positive space inside margins) and be at most 200 inches; invalid or nonfinite dimensions cannot start conversion. These page-generation bounds do not expand PDF page-rendering limits. Aspect ratio and image orientation are applied; transparency is composited onto white. Images are decoded one at a time and embedded as JPEG at quality 90. HEIC containers use their primary still image; other animated/multipage inputs are rejected. The resulting PDF is reopened and its page count validated before publication.
-
-### Limits
-
-- Text source: 4 MiB, 128 nesting levels, 100,000 parser nodes/events; normalized assets: 16 MiB combined, with existing per-image limits; normal text output: 32 MiB.
-- PDF input/output validation: 128 MiB and 1–500 pages. Extraction: at most two million characters per page and 32 MiB extracted text; escaped reconstruction is bounded to 64 MiB.
-- PDF page rendering: at most 16 million pixels/16,384 pixels per side at 150 DPI; sequential pages and at most 512 MiB staged page-image output.
-- Images to PDF: 1–100 still images and 100 million combined decoded pixels. PDF document assets share the combined pixel budget. Individual image limits remain 16 million pixels, 16,384 pixels per side and 128 MiB input/decoded data.
-
-These bounds limit application-managed buffers; PDFium/codec internal allocations are not an operating-system memory sandbox. Very complex documents may still fail. Progress is indeterminate during layout/encoding steps without measurable totals, and page-based once page totals are known.
-
-## Retained audio/video and image behavior
-
-Bundled FFmpeg/FFprobe **9.0.2 essentials** validate media and use explicit H.264/AAC (MP4/MKV), VP9/Opus (WebM), MP3, PCM WAV, FLAC and AAC M4A presets. Audio extraction requires an audio stream. The first actual video stream and optional first audio stream are selected; cover art, subtitles and attachments are excluded. Media progress comes from FFmpeg. Success requires exit and output-container/codec validation. Cancellation/app exit terminates and reaps the owned process. See [the pinned manifest](scripts/ffmpeg-manifest.json).
-
-Conventional single-image conversion uses compiled Rust `image = 0.25.10`, with JPEG, PNG, WebP, BMP and TIFF codecs. EXIF orientation is applied; dimensions are preserved after orientation. Supported alpha is retained except JPEG, which composites onto white at quality 90. Outputs use 8-bit channels; WebP is lossless for normalized pixels. Metadata/ICC profiles are not copied and no ICC color transform is performed. Animated/multipage images and corrupt/oversized inputs are rejected. This is not complete metadata preservation or universally lossless conversion. HEIC uses the shared path described below.
-
-### HEIC inputs
-
-Converter and Images to PDF accept `.heic` case-insensitively and validate HEIF container contents and actual HEVC decoding. HEIC is **input only**; the output choices remain JPG, PNG, WebP, BMP and TIFF. The existing hash-pinned bundled **FFmpeg/FFprobe 9.0.2 essentials** supplies native software HEVC decoding and HEIF item/tile-grid assembly. No additional binary, codec pack, Store extension, runtime, dependency installation or first-launch download is needed. Inspection, thumbnails, image conversion and PDF ingestion all call the same bounded decoder and use the same normalized pixels. Work stays on existing background workers and cancellable owned child processes; shared Queue snapshots and terminal History recording remain in place across feature navigation.
-
-Multi-image HEIC containers use the **primary still image** identified by `pitm`, including tiled primary images. Other stills, thumbnails and depth images are not substituted for the primary image. HEIF clean aperture/crop, rotation and mirroring are applied by FFmpeg; informative EXIF orientation is not applied a second time. Supported input is **8-bit SDR HEVC** with unspecified or supported BT.709/sRGB-compatible color declarations. No ICC color management is performed. High-bit-depth/HDR, wide-gamut or ICC-profiled HEIC, alpha/gain maps, sequences, other codecs and unknown essential properties fail with an export-to-standard-SDR/PNG/JPEG explanation. Conventional-image transparency/color handling is unchanged. `.heif` is not advertised or selectable in this milestone.
-
-Existing per-image limits apply before/after decoding: 16 million pixels, 16,384 pixels per side, and 128 MiB input/decoded buffers. HEIC additionally bounds metadata to 8 MiB, exposed streams/groups to 256 and combined exposed coded raster bytes to 128 MiB; coded tile/canvas sizes are checked before filter assembly. FFprobe inspection times out after 15 seconds and HEIC raster decoding after 60 seconds. These controls limit application-managed work, not every codec-internal allocation. Unsupported/corrupt files fail without publishing an output; temporary normalized rasters are removed after success, failure or cancellation. Preview failure remains nonblocking and actual jobs validate again at execution.
-
-Offline tests use genuine HEVC-in-HEIF geometric fixtures generated with the pinned FFmpeg/libx265; their provenance/CC0 dedication is in [the fixture notice](tests/fixtures/heic/NOTICE.md). `node scripts/generate-heic-fixtures.mjs` optionally regenerates them. `npm run engines:verify` now exercises actual primary-item, transformed-pixel and tiled decoding in addition to executable hashes/configuration/DLL imports. The existing Tauri sidecar entries package both required engines; the [HEIC notice](third-party/heic/NOTICE.md) is bundled under `notices/heic/`. This reuses the existing GPL-3.0-or-later FFmpeg distribution: **the existing complete-corresponding-source and dependency-notice release obligations remain unresolved**. No patent clearance is claimed.
-
-Transform combinations follow crop → rotation → mirror; repeated transformations or other property orders are rejected with an export suggestion, rather than reordered silently.
-
-HEIC verification on Windows x64 covered all five image outputs, shared thumbnails, crop/rotation/mirroring (including conflicting EXIF), a rotated tile grid, second-item primary selection, mixed HEIC/PNG PDF page sizes/rendered content, corrupt packets, unsupported color/alpha/high-bit-depth and oversized headers. Frontend type-check/build, 48 focused frontend/Queue/History tests, 31 focused Rust image/PDF/preview/sidecar tests and `cargo check` passed. Generated outputs were inspected. The development app built; normal MSI assembly failed during WiX ICE validation because the environment could not access the Windows Installer service. A separate **payload-check-only MSI**, linked with `light -sval`, was inspected read-only: both engine payload sizes and HEIC/FFmpeg notices were present, and staged engine SHA-256 hashes matched the manifest. This does **not** verify MSI consistency, installation or installed-app behavior; no app was installed and no registry settings were changed. Native selection, drag/drop, dialogs and installed behavior remain manual checks.
+![Saved job history with search and task/status filters](demo-images/history-page-populated.png)
 
 ## Bundled components and development
 
-Users install no conversion tools, choose no engine folders and receive no first-launch engine downloads. FFmpeg/FFprobe are local sidecars (also used for HEIC); PDFium is an application-local DLL with V8 and XFA disabled. Conventional image/text libraries are compiled into the app. Missing/damaged bundled assets produce a repair message; there is no PATH/system-tool fallback.
+Users install no conversion tools, choose no engine folders and receive no first-launch engine downloads. Bundled engines are **FFmpeg/FFprobe 9.0.2 essentials**, **yt-dlp 2026.10.26** (with embedded EJS scripts), **Deno 2.9.8**, and application-local **PDFium** with V8/XFA disabled. Conventional image/text libraries are compiled into the app. Missing/damaged assets produce a repair message; there is no PATH/system-tool fallback.
 
 The local Tauri 2 CLI, React, TypeScript, Vite and plain CSS foundation requires Windows x64, Node/npm, Rust MSVC, C++ build tools/Windows SDK and WebView2. npm/Cargo lockfiles are retained. On a fresh checkout use `npm ci`.
 
@@ -221,7 +108,7 @@ Frontend preview only (no native dialogs/conversion):
 npm run dev
 ```
 
-Desktop development/build hooks run `engines:prepare`, `downloader:prepare` and `pdf:prepare` before the frontend. Pinned URLs, SHA-256 hashes, versions and build flags are in `scripts/ffmpeg-manifest.json`, `scripts/downloader-manifest.json` and `scripts/pdf-manifest.json`. Verified project-local caches are reused; downloads/extraction happen only during developer setup/build. No global installation or PATH changes occur. `npm run pdf:prepare` can be run separately; `npm run pdf:verify-resources` checks the compiled debug payload. Generated assets/caches are ignored by Git. Preserve tracked manifests, preparation scripts and notices.
+Desktop development/build hooks run `engines:prepare`, `downloader:prepare`, `pdf:prepare` and `companion:build` before the frontend. Pinned URLs, SHA-256 hashes, versions and build flags are in `scripts/ffmpeg-manifest.json`, `scripts/downloader-manifest.json` and `scripts/pdf-manifest.json`. Verified project-local caches are reused; downloads/extraction happen only during developer setup/build. No global installation or PATH changes occur. `npm run pdf:prepare` can be run separately; `npm run pdf:verify-resources` checks the compiled debug payload. Preserve tracked manifests, preparation scripts and notices.
 
 Build a Windows debug application without an installer:
 
@@ -229,22 +116,12 @@ Build a Windows debug application without an installer:
 npm run tauri -- build --debug --no-bundle
 ```
 
-The executable is `src-tauri/target/debug/clip-clip-go.exe`. Retain its accompanying `ffmpeg.exe`, `ffprobe.exe`, `yt-dlp.exe`, `deno.exe`, `pdf/` and `notices/` trees. Copying the executable alone is insufficient; no portable ZIP is provided. This milestone does not build/install an MSI or implement installer component selection.
+The executable is `src-tauri/target/debug/clip-clip-go.exe`. Retain its accompanying `ffmpeg.exe`, `ffprobe.exe`, `yt-dlp.exe`, `deno.exe`, `pdf/`, `notices/`, native host and `extension/` resources. Copying the executable alone is insufficient; no portable ZIP is provided. Building does not verify installation or native dialogs.
 
-Notices are in `third-party/ffmpeg`, `third-party/downloader`, `third-party/text` and `third-party/pdf` and are packaged under `notices/`. PDFium binary dependencies, Noto Sans OFL, and native wrapper licenses are retained. The application license is unchanged. **FFmpeg public redistribution/source obligations remain open** as documented in [its notice](third-party/ffmpeg/NOTICE.md); attribution alone is insufficient.
+Notices are in `third-party/ffmpeg`, `third-party/downloader`, `third-party/text`, `third-party/pdf` and `third-party/heic`, packaged under `notices/`. Bundled Montserrat/Noto Sans fonts retain their OFL licenses, alongside engine/dependency notices. The application license is unchanged. **FFmpeg public redistribution and complete-corresponding-source obligations remain open** as documented in [its notice](third-party/ffmpeg/NOTICE.md); attribution alone is insufficient. No patent clearance is claimed.
 
-See [docs/text-pdf.md](docs/text-pdf.md) for measured cleanup, dependency/resource sizes and verification results.
+## Verification
 
-## Verification and manual checks
+Use `npm run typecheck`, `npm run build` and focused tests appropriate to the change; `npm test` runs the frontend suite. Rust checks use `cargo check --manifest-path src-tauri/Cargo.toml` and targeted `cargo test` filters. `npm run engines:verify`, `npm run downloader:verify` and `npm run pdf:verify-resources` check prepared resources. This checkout's cached Rust checks use PowerShell `$env:CARGO_HOME="$PWD/.cargo-cache"` and `$env:CARGO_NET_OFFLINE="true"`.
 
-Automated: `npm test`, `npm run typecheck`, `npm run build`, `cargo test --manifest-path src-tauri/Cargo.toml`, `cargo check --manifest-path src-tauri/Cargo.toml`, and the debug build above. This checkout's cached Rust checks use PowerShell `$env:CARGO_HOME="$PWD/.cargo-cache"` and `$env:CARGO_NET_OFFLINE="true"`; temporary files can be directed to `.engine-cache/tmp`. `node scripts/check-converter-layout.mjs` creates isolated development fixtures in `.engine-cache/ui-check/converter.html` with dataset, viewport and enlarged-text controls. It checks rendered markup/state and supports CSS review; it does not measure browser pixels or verify native dialogs. Fixture controls do not ship in the application.
-
-The user performs manual functionality testing. Automated/SSR checks do not establish visual or native-dialog verification.
-
-Manual checklist: try each document route with Unicode and multiline content; verify PDF pagination/reading order; render all pages and a range to new PNG/JPEG folders; try scanned, encrypted, corrupt and missing-asset files; add/reorder/remove images, inspect A4/image-sized pages, orientation and transparency; cancel and test existing destinations; navigate away/back; recheck one audio/video and single-image conversion; confirm Office inputs are rejected; check narrow windows, keyboard focus and 200% text scaling.
-
-For the layout/preview pass: check all six destinations; retain a single file and an ordered image list while switching pages; try long filenames/paths, short windows and enlarged text; confirm oriented image/video previews and audio/document icons; rapidly replace/remove selections to check stale previews; verify conversion and cancellation still work when a preview is unavailable. Desktop appearance, native dialogs and manual functionality require user confirmation.
-
-Native drop integration uses [Tauri 2.12.5 webview drag/drop events](https://v2.tauri.app/reference/javascript/api/namespacewebview/#ondragdropevent); physical coordinates are mapped to the active selection card with the current WebView pixel ratio. Only actual OS-delivered drop paths can be claimed once by the native metadata command. No general filesystem permission or browser File.path is used. Drops outside a selection card are ignored. Detach developer tools when testing drop coordinates (a documented WebView limitation).
-
-Browser companion 0.5.0 uses associated posters, then bounded readable decoded-frame snapshots, then the default icon. Thumbnails stay static and cover-cropped; no seeking, playback requests or capture permissions are added. Additional origin grants remain in Settings. The header shows a theme-aware shared logo and a Connect/Connecting/Connected button (Connected disconnects); Allow/Rescan shares one action and Send scrolls with candidates. Site/CDN access must be granted explicitly. The popup keeps permission, troubleshooting and privacy controls in its Settings dialog. Inspection now requests compact yt-dlp metadata rather than fragment-heavy full dictionaries, retaining the 2 MiB safety cap and all usable format choices. See [inspection and preview limits](docs/downloader.md).
+Local fixtures/SSR tests do not prove public-site compatibility, rendered desktop appearance or native-dialog behavior. Browser permissions/playback, native selection/save dialogs and installed-app behavior require manual testing. Native drag/drop uses Tauri webview events and actual OS paths; detach developer tools when manually checking drop coordinates.
